@@ -1,0 +1,2117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StrategyHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;1,400;1,500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: '#0f172a',
+            card:    '#1e293b',
+            border:  '#334155',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #0f172a; }
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      width: 100%;
+      text-align: left;
+      padding: .55rem .9rem;
+      border-radius: .5rem;
+      font-size: .875rem;
+      font-weight: 500;
+      color: #94a3b8;
+      transition: background .15s, color .15s;
+    }
+    .tab-btn:hover  { background: #1e293b; color: #e2e8f0; }
+    .tab-btn.active { background: #3b82f6; color: #fff; }
+    .page { display: none; }
+    .page.active { display: block; }
+    .badge {
+      display: inline-block;
+      padding: .15rem .55rem;
+      border-radius: 9999px;
+      font-size: .75rem;
+      font-weight: 600;
+    }
+    .badge-competitor { background:#7c3aed22; color:#a78bfa; }
+    .badge-news       { background:#0891b222; color:#38bdf8; }
+    .badge-market     { background:#05966922; color:#34d399; }
+    .badge-general    { background:#64748b22; color:#94a3b8; }
+    .badge-own        { background:#d9770622; color:#fb923c; }
+    /* Modal */
+    #chunk-modal, #urls-modal, #add-url-modal, #export-modal { display:none; }
+    #chunk-modal.open, #urls-modal.open, #add-url-modal.open, #export-modal.open { display:flex; }
+    .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
+    .status-idle     { background:#475569; }
+    .status-running  { background:#3b82f6; animation: pulse 1s ease-in-out infinite; }
+    .status-completed{ background:#10b981; }
+    .status-error    { background:#ef4444; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    #chunk-modal-body::-webkit-scrollbar { width:6px; }
+    #chunk-modal-body::-webkit-scrollbar-thumb { background:#334155; border-radius:3px; }
+    .chunk-item { cursor:pointer; transition:border-color .15s, background .15s; }
+    .chunk-item:hover { border-color:#3b82f6 !important; background:#1e3a5f22; }
+
+    .spinner {
+      width:18px; height:18px;
+      border:2px solid #334155;
+      border-top-color:#3b82f6;
+      border-radius:50%;
+      animation: spin .7s linear infinite;
+      display:inline-block;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .news-cat-btn {
+      padding: .25rem .85rem;
+      border-radius: 9999px;
+      font-size: .75rem;
+      font-weight: 600;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      background: transparent;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .news-cat-btn:hover  { background: #1e293b; color: #e2e8f0; border-color: #475569; }
+    .news-cat-btn.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+    .line-clamp-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .line-clamp-3 { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+    .src-tab-btn {
+      padding: .5rem 1.25rem;
+      font-size: .875rem;
+      font-weight: 500;
+      color: #64748b;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+      margin-bottom: -1px;
+    }
+    .src-tab-btn:hover  { color: #e2e8f0; }
+    .src-tab-btn.active { color: #fff; border-bottom-color: #3b82f6; }
+    .gtm-lens-btn { background: transparent; color: #94a3b8; cursor: pointer; }
+    .gtm-lens-btn:hover { background: #1e293b; color: #e2e8f0; }
+    .gtm-lens-btn.active { background: #3b82f6; color: #fff; }
+    .gtm-sub-tab { padding:.5rem 1.25rem; font-size:.875rem; font-weight:500; color:#64748b; border-bottom:2px solid transparent; background:transparent; cursor:pointer; transition:color .15s,border-color .15s; margin-bottom:-1px; }
+    .gtm-sub-tab:hover { color:#e2e8f0; }
+    .gtm-sub-tab.active { color:#fff; border-bottom-color:#3b82f6; }
+    .td-label { font-family:'IBM Plex Mono',monospace; font-size:.625rem; letter-spacing:.1em; text-transform:uppercase; color:#8A93A3; }
+    .td-claim { font-family:'IBM Plex Serif',serif; font-style:italic; font-size:.9375rem; color:#e8e4d9; line-height:1.55; }
+    .td-value { font-size:.8125rem; color:#94a3b8; line-height:1.5; }
+
+    @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+    /* Positioning Teardown */
+    .pos-card { display: flex; flex-direction: column; }
+    .pos-field {
+      display: grid;
+      grid-template-columns: 4.5rem 1fr;
+      gap: .5rem;
+      align-items: start;
+      padding: .7rem 1.25rem;
+      border-top: 1px solid rgba(51,65,85,0.5);
+    }
+    .pos-label {
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
+      font-size: .625rem;
+      font-weight: 600;
+      letter-spacing: .09em;
+      color: #8A93A3;
+      text-transform: uppercase;
+      padding-top: 2px;
+      line-height: 1.6;
+    }
+    .pos-value { font-size: .8125rem; color: #cbd5e1; line-height: 1.5; }
+    .pos-claim-value {
+      font-family: 'IBM Plex Serif', Georgia, serif;
+      font-style: italic;
+      font-size: .9375rem;
+      color: #E8E4D9;
+      line-height: 1.45;
+    }
+    .pos-card:focus-within { outline: 2px solid #3b82f6; outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { .pos-card, .gtm-cell { transition: none !important; } }
+  </style>
+</head>
+<body class="text-slate-200 min-h-screen">
+
+  <!-- ── App Layout ─────────────────────────────────── -->
+  <div class="flex min-h-screen">
+
+  <!-- ── Sidebar ────────────────────────────────────── -->
+  <aside class="fixed left-0 top-0 h-screen w-52 bg-card border-r border-border flex flex-col z-10">
+    <div class="px-4 py-5 flex items-center gap-2.5 border-b border-border">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zm6.75-9.75C9.75 2.754 10.254 2.25 10.875 2.25h2.25c.621 0 1.125.504 1.125 1.125v16.5c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 019.75 19.875V3.375zm6.75 4.5c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v12c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125v-12z"/>
+      </svg>
+      <span class="text-sm font-bold text-white tracking-tight">StrategyHub</span>
+    </div>
+    <nav class="flex flex-col gap-0.5 p-3 pt-4 flex-1">
+      <button class="tab-btn" data-page="own" onclick="showPage('own')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z"/></svg>
+        My Company
+      </button>
+      <button class="tab-btn active" data-page="dashboard" onclick="showPage('dashboard')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zm6.75-9.75C9.75 2.754 10.254 2.25 10.875 2.25h2.25c.621 0 1.125.504 1.125 1.125v16.5c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 019.75 19.875V3.375zm6.75 4.5c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v12c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125v-12z"/></svg>
+        Dashboard
+      </button>
+      <button class="tab-btn" data-page="sources" onclick="showPage('sources')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253"/></svg>
+        Sources
+      </button>
+      <button class="tab-btn" data-page="competitors" onclick="showPage('competitors')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941"/></svg>
+        Competitors
+      </button>
+      <button class="tab-btn" data-page="chat" onclick="showPage('chat')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"/></svg>
+        Insights
+      </button>
+      <button class="tab-btn" data-page="news" onclick="showPage('news')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 01-2.25 2.25M16.5 7.5V18a2.25 2.25 0 002.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 002.25 2.25h13.5M6 7.5h3v3H6v-3z"/></svg>
+        News
+      </button>
+      <button class="tab-btn" data-page="gtm" onclick="showPage('gtm')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/></svg>
+        Go to Market
+      </button>
+    </nav>
+  </aside>
+
+  <!-- ── Main content ───────────────────────────────── -->
+  <main class="ml-52 flex-1 min-h-screen overflow-y-auto">
+  <!-- ── URLs Modal ────────────────────────────────────── -->
+  <div id="urls-modal" class="fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target===this)closeUrlsModal()">
+    <div class="bg-card border border-border rounded-2xl w-full max-w-xl max-h-[75vh] flex flex-col shadow-2xl">
+      <div class="flex items-center justify-between gap-4 p-5 border-b border-border">
+        <div>
+          <p id="urls-modal-title" class="font-semibold text-white text-base"></p>
+          <p id="urls-modal-count" class="text-xs text-slate-400 mt-0.5"></p>
+        </div>
+        <button onclick="closeUrlsModal()" class="shrink-0 text-slate-400 hover:text-white transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div id="urls-modal-body" class="flex-1 overflow-y-auto p-3 space-y-1"></div>
+    </div>
+  </div>
+  <!-- ── Export Modal ─────────────────────────────────── -->
+  <div id="export-modal" class="fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target===this)closeExportModal()">
+    <div class="bg-card border border-border rounded-2xl w-full max-w-2xl flex flex-col shadow-2xl" style="max-height:85vh">
+      <div class="flex items-center justify-between gap-4 p-5 border-b border-border">
+        <div>
+          <p class="font-semibold text-white text-base">Competitor Change Report</p>
+          <p class="text-xs text-slate-400 mt-0.5">Select all and copy, or use the button below</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="copyExport()" id="copy-export-btn"
+            class="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/>
+            </svg>
+            Copy to Clipboard
+          </button>
+          <button onclick="closeExportModal()" class="shrink-0 text-slate-400 hover:text-white transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <textarea id="export-text" readonly onclick="this.select()"
+        class="flex-1 p-5 text-sm text-slate-300 bg-surface font-mono leading-relaxed resize-none focus:outline-none overflow-y-auto"
+        style="min-height:320px;"></textarea>
+    </div>
+  </div>
+
+  <!-- ── Add URL Modal ─────────────────────────────────── -->
+  <div id="add-url-modal" class="fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target===this)closeAddUrlModal()">
+    <div class="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl">
+      <div class="flex items-center justify-between gap-4 p-5 border-b border-border">
+        <div>
+          <p class="font-semibold text-white text-base">Add Specific URL</p>
+          <p id="add-url-source-label" class="text-xs text-slate-400 mt-0.5"></p>
+        </div>
+        <button onclick="closeAddUrlModal()" class="shrink-0 text-slate-400 hover:text-white transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="p-5">
+        <p class="text-xs text-slate-500 mb-3">Paste any URL from this source to fetch and embed its content directly.</p>
+        <input id="add-url-input" type="url" placeholder="https://example.com/specific-page"
+          class="w-full bg-surface border border-border rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"/>
+        <div id="add-url-status" class="text-sm mb-3 hidden"></div>
+        <div class="flex gap-3 justify-end">
+          <button onclick="closeAddUrlModal()"
+            class="text-sm text-slate-400 hover:text-white px-4 py-2 rounded-lg transition border border-border hover:border-slate-500">
+            Cancel
+          </button>
+          <button id="add-url-submit" onclick="submitAddUrl()"
+            class="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition">
+            Fetch &amp; Index
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chunk Modal ─────────────────────────────────── -->
+  <div id="chunk-modal" class="fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target===this)closeModal()">
+    <div class="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+      <div class="flex items-start justify-between gap-4 p-5 border-b border-border">
+        <div class="min-w-0">
+          <p id="chunk-modal-title" class="font-semibold text-white text-base"></p>
+          <p id="chunk-modal-meta" class="text-xs text-slate-400 mt-1 truncate"></p>
+        </div>
+        <button onclick="closeModal()" class="shrink-0 text-slate-400 hover:text-white transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <pre id="chunk-modal-body" class="flex-1 overflow-y-auto p-5 text-sm text-slate-300 whitespace-pre-wrap font-sans leading-relaxed"></pre>
+    </div>
+  </div>
+
+  <!-- ── Dashboard ──────────────────────────────────── -->
+  <div id="page-dashboard" class="page active p-6 max-w-5xl mx-auto">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-7">
+      <div>
+        <h1 class="text-2xl font-bold">Intelligence Dashboard</h1>
+        <p class="text-sm text-slate-400 mt-0.5" id="dash-subtitle">Loading…</p>
+      </div>
+      <button onclick="scrapeAll()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+        </svg>
+        Scrape All
+      </button>
+    </div>
+
+    <!-- KPI Strip -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div class="bg-card border border-border rounded-xl p-4">
+        <div class="flex items-start justify-between mb-3">
+          <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Sources</p>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253"/></svg>
+        </div>
+        <p class="text-3xl font-bold text-white" id="stat-total-sources">—</p>
+        <p class="text-xs text-slate-500 mt-1" id="stat-active-sub">—</p>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-4">
+        <div class="flex items-start justify-between mb-3">
+          <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Competitors</p>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941"/></svg>
+        </div>
+        <p class="text-3xl font-bold text-violet-300" id="stat-competitors">—</p>
+        <p class="text-xs text-slate-500 mt-1" id="stat-competitors-sub">—</p>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-4">
+        <div class="flex items-start justify-between mb-3">
+          <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Content Indexed</p>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75M3.75 13.875v3.75"/></svg>
+        </div>
+        <p class="text-3xl font-bold text-emerald-400" id="stat-chunks">—</p>
+        <p class="text-xs text-slate-500 mt-1">total chunks</p>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-4">
+        <div class="flex items-start justify-between mb-3">
+          <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Last Update</p>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <p class="text-base font-semibold text-blue-300" id="stat-last-scrape">—</p>
+        <p class="text-xs mt-1" id="stat-freshness">—</p>
+      </div>
+    </div>
+
+    <!-- Two-column: Coverage + Source Health -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div class="bg-card border border-border rounded-xl p-5">
+        <h2 class="text-sm font-semibold text-white mb-4">Coverage by Category</h2>
+        <div id="coverage-list" class="space-y-3.5">
+          <p class="text-slate-500 text-sm">Loading…</p>
+        </div>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-5">
+        <h2 class="text-sm font-semibold text-white mb-3">Source Health</h2>
+        <div id="source-health-list">
+          <p class="text-slate-500 text-sm">Loading…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Competitors ────────────────────────────────── -->
+  <div id="page-competitors" class="page p-6 max-w-6xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-bold">Competitor Profiles</h1>
+      <button onclick="generateAllSummaries()"
+        class="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+        </svg>
+        Generate All
+      </button>
+    </div>
+    <!-- McKinsey Competitive Landscape Matrix -->
+    <div id="comparison-panel" class="bg-card border border-border rounded-2xl overflow-hidden mb-6">
+      <div class="flex items-center justify-between gap-4 px-5 py-4 border-b border-border">
+        <div>
+          <h2 class="font-semibold text-white text-sm tracking-wide">Competitive Landscape Matrix</h2>
+          <p class="text-xs text-slate-400 mt-0.5">McKinsey-style executive cross-competitor analysis</p>
+        </div>
+        <button onclick="generateComparison()" id="btn-comparison"
+          class="flex items-center gap-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs font-medium px-3 py-1.5 rounded-lg transition border border-indigo-500/30">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6"/>
+          </svg>
+          Generate Analysis
+        </button>
+      </div>
+      <div id="comparison-body" class="p-5">
+        <p class="text-slate-500 text-sm italic">Generate individual competitor summaries first, then click &ldquo;Generate Analysis&rdquo; for an executive-level matrix.</p>
+      </div>
+    </div>
+
+    <div id="competitors-list" class="space-y-4">
+      <p class="text-slate-500 text-sm">Loading…</p>
+    </div>
+  </div>
+
+  <!-- ── My Company ──────────────────────────────────── -->
+  <div id="page-own" class="page p-6 max-w-4xl mx-auto">
+    <div class="mb-6">
+      <h1 class="text-2xl font-bold">My Company</h1>
+      <p class="text-sm text-slate-400 mt-1">Index your own web presence as a baseline. This content is kept separate from competitor sources and can be used as the reference point in analysis.</p>
+    </div>
+
+    <!-- Stats strip -->
+    <div id="own-stats" class="grid grid-cols-3 gap-3 mb-6"></div>
+
+    <!-- Add source -->
+    <div class="bg-card border border-border rounded-xl p-5 mb-6">
+      <h2 class="text-base font-semibold mb-4">Add Company Source</h2>
+      <form id="add-own-form" onsubmit="addOwnSource(event)" class="grid sm:grid-cols-2 gap-3">
+        <input id="own-src-name" type="text" placeholder="Name (e.g. Our Website)" required
+          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
+        <input id="own-src-url" type="url" placeholder="https://yourcompany.com" required
+          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
+        <div class="flex items-center gap-2">
+          <input id="own-src-interval" type="number" min="1" max="168" value="24" placeholder="Interval (hrs)"
+            class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500"/>
+          <span class="text-xs text-slate-400 whitespace-nowrap">hrs</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <button type="submit" class="bg-orange-600 hover:bg-orange-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition">
+            Add Source
+          </button>
+          <span id="add-own-msg" class="text-sm"></span>
+        </div>
+      </form>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold text-slate-300">Indexed Sources</h2>
+      <button onclick="scrapeAllOwn()"
+        class="flex items-center gap-1.5 text-xs bg-orange-600/20 hover:bg-orange-600/40 text-orange-300 border border-orange-500/30 px-3 py-1.5 rounded-lg transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
+        Scrape All
+      </button>
+    </div>
+    <div id="own-sources-list" class="space-y-3">
+      <p class="text-slate-500 text-sm">Loading…</p>
+    </div>
+  </div>
+
+  <!-- ── Sources ────────────────────────────────────── -->
+  <div id="page-sources" class="page p-6 max-w-4xl mx-auto">
+    <h1 class="text-2xl font-bold mb-5">Sources</h1>
+
+    <!-- Sub-tabs -->
+    <div class="flex gap-0 border-b border-border mb-6">
+      <button class="src-tab-btn active" data-src-tab="list" onclick="showSrcTab('list')">Sources</button>
+      <button class="src-tab-btn" data-src-tab="content" onclick="showSrcTab('content')">Recent Content</button>
+    </div>
+
+    <!-- Sources list sub-tab -->
+    <div id="src-tab-list">
+
+    <!-- Add Source form -->
+    <div class="bg-card border border-border rounded-xl p-5 mb-6">
+      <h2 class="text-base font-semibold mb-4">Add Source</h2>
+      <form id="add-source-form" onsubmit="addSource(event)" class="grid sm:grid-cols-2 gap-3">
+        <input id="src-name" type="text" placeholder="Name (e.g. TechCrunch)" required
+          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+        <input id="src-url" type="url" placeholder="https://example.com" required
+          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+        <select id="src-category"
+          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="general">General</option>
+          <option value="competitor">Competitor</option>
+          <option value="news">News</option>
+          <option value="market">Market</option>
+          <option value="own">My Company</option>
+        </select>
+        <div class="flex items-center gap-2">
+          <input id="src-interval" type="number" min="1" max="168" value="24" placeholder="Interval (hrs)"
+            class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+          <span class="text-xs text-slate-400 whitespace-nowrap">hrs</span>
+        </div>
+        <div class="sm:col-span-2 flex items-center gap-3">
+          <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition">
+            Add Source
+          </button>
+          <span id="add-source-msg" class="text-sm"></span>
+        </div>
+      </form>
+    </div>
+
+    <!-- Sources table -->
+    <div class="flex flex-wrap gap-1.5 mb-4" id="src-category-pills">
+      <button class="news-cat-btn active" data-cat="" onclick="setSrcCategory('')">All</button>
+      <button class="news-cat-btn" data-cat="own"        onclick="setSrcCategory('own')">My Company</button>
+      <button class="news-cat-btn" data-cat="competitor" onclick="setSrcCategory('competitor')">Competitors</button>
+      <button class="news-cat-btn" data-cat="news"       onclick="setSrcCategory('news')">News</button>
+      <button class="news-cat-btn" data-cat="market"     onclick="setSrcCategory('market')">Market</button>
+      <button class="news-cat-btn" data-cat="general"    onclick="setSrcCategory('general')">General</button>
+    </div>
+    <div id="sources-table" class="space-y-3">
+      <p class="text-slate-500 text-sm">Loading…</p>
+    </div>
+
+    </div><!-- end src-tab-list -->
+
+    <!-- Recent Content sub-tab -->
+    <div id="src-tab-content" class="hidden">
+      <div id="content-list" class="space-y-3">
+        <p class="text-slate-500 text-sm">Loading…</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── News ──────────────────────────────────────────── -->
+  <div id="page-news" class="page p-6 max-w-4xl mx-auto">
+    <div class="flex items-center justify-between mb-5">
+      <div>
+        <h1 class="text-2xl font-bold">News Feed</h1>
+        <p class="text-sm text-slate-400 mt-0.5">Latest content from monitored news sources</p>
+      </div>
+      <button onclick="loadNews(true)"
+        class="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
+
+    <!-- Search -->
+    <div class="flex items-center gap-3 mb-5">
+      <input id="news-search" type="text" placeholder="Filter by keyword…"
+        oninput="filterNews()"
+        class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"/>
+    </div>
+
+    <!-- 5-Day Intelligence Digest -->
+    <div class="bg-card border border-border rounded-xl mb-6 overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3.5 border-b border-border">
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+          </svg>
+          <h2 class="font-semibold text-white text-sm">5-Day Intelligence Digest</h2>
+          <span id="digest-date" class="text-xs text-slate-500"></span>
+        </div>
+        <button onclick="loadNewsDigest()" id="digest-gen-btn"
+          class="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition">
+          Generate Digest
+        </button>
+      </div>
+      <div id="news-digest" class="px-5 py-4">
+        <p class="text-slate-500 text-sm">Click <strong class="text-slate-400">Generate Digest</strong> for an AI executive summary of the last 5 days of news.</p>
+      </div>
+    </div>
+
+    <div id="news-feed" class="space-y-3">
+      <p class="text-slate-500 text-sm">Loading…</p>
+    </div>
+
+    <div id="news-load-more" class="mt-5 text-center hidden">
+      <button onclick="loadMoreNews()"
+        class="text-sm text-slate-400 hover:text-blue-400 transition border border-border px-5 py-2 rounded-lg hover:border-blue-500">
+        Load more
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Insights ──────────────────────────────────── -->
+  <div id="page-chat" class="page">
+    <div class="px-5 py-4 border-b border-border flex items-center justify-between gap-4">
+      <div>
+        <h1 class="text-xl font-bold">Strategy Insights</h1>
+        <p class="text-sm text-slate-400 mt-0.5">Competitor change analysis grounded in your scraped data.</p>
+      </div>
+      <button onclick="loadCompetitorChanges()" id="changes-btn"
+        class="flex items-center gap-1.5 text-xs bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 px-3 py-2 rounded-lg transition shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+        </svg>
+        What's Changed
+      </button>
+    </div>
+
+    <!-- Per-competitor change analysis panel -->
+    <div id="changes-panel" class="hidden">
+      <div id="changes-content" class="p-5">
+        <p class="text-slate-500 text-sm">Loading…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Go to Market ────────────────────────────────── -->
+  <div id="page-gtm" class="page">
+    <div class="px-6 pt-6 pb-0 border-b border-border">
+      <div class="mb-4">
+        <h1 class="text-2xl font-bold">Go to Market</h1>
+        <p class="text-sm text-slate-400 mt-0.5">Competitor intelligence for GTM strategy.</p>
+      </div>
+      <nav class="flex -mb-px" role="tablist" aria-label="GTM views">
+        <button class="gtm-sub-tab active" data-gtm-tab="heatmap" onclick="showGtmTab('heatmap')" role="tab" aria-selected="true">Segment Heatmap</button>
+        <button class="gtm-sub-tab" data-gtm-tab="positioning" onclick="showGtmTab('positioning')" role="tab" aria-selected="false">Positioning Teardown</button>
+      </nav>
+    </div>
+    <!-- ── Heatmap sub-panel ──── -->
+    <div id="gtm-sub-heatmap" class="p-6 max-w-7xl mx-auto" role="tabpanel">
+      <div class="flex flex-wrap items-center justify-end gap-3 mb-6">
+        <div class="flex rounded-lg border border-border overflow-hidden text-xs">
+          <button onclick="setGtmLens('both')" data-lens="both" class="gtm-lens-btn active px-3 py-1.5 font-medium transition">Both</button>
+          <button onclick="setGtmLens('defense')" data-lens="defense" class="gtm-lens-btn px-3 py-1.5 font-medium border-l border-border transition">&#128737; Defense</button>
+          <button onclick="setGtmLens('offense')" data-lens="offense" class="gtm-lens-btn px-3 py-1.5 font-medium border-l border-border transition">&#9889; Offense</button>
+        </div>
+        <button onclick="loadGtmHeatmap()" id="gtm-refresh-btn"
+          class="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-2 rounded-lg transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+          </svg>
+          Generate Heatmap
+        </button>
+      </div>
+
+    <div id="gtm-loading" class="hidden text-center py-20">
+      <span class="spinner"></span>
+      <p class="text-slate-400 text-sm mt-4 animate-pulse">Analysing competitor data and mapping segments…</p>
+    </div>
+    <div id="gtm-error" class="hidden text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-xl p-4 mb-4"></div>
+
+    <div id="gtm-table-wrap" class="hidden overflow-x-auto rounded-xl border border-border mb-3">
+      <table id="gtm-table" class="w-full text-sm border-collapse" role="grid" aria-label="ICP segment by competitor heatmap">
+        <thead>
+          <tr id="gtm-thead-row" class="bg-surface border-b border-border">
+            <th scope="col" class="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide px-4 py-3 min-w-[210px] sticky left-0 bg-surface z-10 border-r border-border/30">Segment / ICP</th>
+          </tr>
+        </thead>
+        <tbody id="gtm-tbody"></tbody>
+      </table>
+    </div>
+
+    <div id="gtm-legend" class="hidden mb-5">
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-slate-500">
+        <span class="font-semibold text-slate-400 mr-1">Fill = Strength:</span>
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded" style="background:rgba(71,85,105,0.65)"></span>Weak</span>
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded" style="background:rgba(146,64,14,0.6)"></span>Moderate</span>
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded" style="background:rgba(194,65,12,0.8)"></span>Strong</span>
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded" style="background:rgba(185,28,28,0.9)"></span>Dominant</span>
+        <span class="text-slate-700 mx-1">|</span>
+        <span class="font-semibold text-slate-400 mr-1">Arrow = Trajectory:</span>
+        <span><span style="color:#4ade80">&#8593;</span> Growing</span>
+        <span><span style="color:#64748b">&#8594;</span> Stable</span>
+        <span><span style="color:#f87171">&#8595;</span> Declining</span>
+        <span class="text-slate-700 mx-1">|</span>
+        <span class="font-semibold text-slate-400 mr-1">Ring = Encroachment:</span>
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded" style="box-shadow:0 0 0 2px rgba(251,191,36,0.8)"></span>Active</span>
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded" style="box-shadow:0 0 0 2px rgba(239,68,68,0.9)"></span>Aggressive</span>
+      </div>
+    </div>
+
+    <div id="gtm-cards" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+      <div id="gtm-defend-card" class="bg-card border border-red-900/40 rounded-xl p-5"></div>
+      <div id="gtm-attack-card" class="bg-card border border-emerald-900/40 rounded-xl p-5"></div>
+    </div>
+
+    <div id="gtm-empty" class="text-center py-20 border border-dashed border-border rounded-xl">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-slate-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z"/>
+      </svg>
+      <p class="text-slate-500 text-sm font-medium">No heatmap generated yet</p>
+      <p class="text-slate-600 text-xs mt-1">Click “Generate Heatmap” to map competitors against ICPs using your scraped data</p>
+    </div>
+    </div><!-- /gtm-sub-heatmap -->
+
+    <!-- ── Positioning Teardown sub-panel ─────────── -->
+    <div id="gtm-sub-positioning" class="p-6 max-w-7xl mx-auto hidden" role="tabpanel">
+      <div class="flex justify-end mb-6">
+        <button onclick="loadPositioningTeardown()" id="td-refresh-btn"
+          class="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-2 rounded-lg transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+          </svg>
+          Generate Teardown
+        </button>
+      </div>
+      <div id="td-loading" class="hidden text-center py-20">
+        <span class="spinner"></span>
+        <p class="text-slate-400 text-sm mt-4 animate-pulse">Reconstructing competitor positioning from scraped content…</p>
+      </div>
+      <div id="td-error" class="hidden text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-xl p-4 mb-6"></div>
+      <div id="td-grid" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-5"></div>
+      <div id="td-empty" class="text-center py-20 border border-dashed border-border rounded-xl">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-slate-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/>
+        </svg>
+        <p class="text-slate-500 text-sm font-medium">No teardown generated yet</p>
+        <p class="text-slate-600 text-xs mt-1">Click “Generate Teardown” to reconstruct each competitor’s positioning</p>
+      </div>
+    </div>
+  </div><!-- /page-gtm -->
+
+  </main>
+  </div><!-- end layout -->
+
+  <!-- ── JavaScript ─────────────────────────────────── -->
+  <script>
+  // ── Navigation ───────────────────────────────────────
+  function showPage(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('page-' + name).classList.add('active');
+    document.querySelector(`[data-page="${name}"]`).classList.add('active');
+    if (name === 'dashboard')   loadDashboard();
+    if (name === 'own')         loadOwnSources();
+    if (name === 'sources')     loadSources();
+    if (name === 'competitors') { loadCompetitors(); startStatusPolling(); }
+    if (name === 'news')        loadNews();
+  }
+
+  // ── API helpers ──────────────────────────────────────
+  async function api(path, options = {}) {
+    const res = await fetch(path, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || 'Request failed');
+    }
+    return res.status === 204 ? null : res.json();
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function badgeHtml(cat) {
+    return `<span class="badge badge-${cat ?? 'general'}">${cat ?? 'general'}</span>`;
+  }
+
+  // ── Dashboard ────────────────────────────────────────
+  function relTime(iso) {
+    if (!iso) return '—';
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1)  return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24)  return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
+
+  async function loadDashboard() {
+    try {
+      const [stats, sources, statuses] = await Promise.all([
+        api('/api/scraper/stats'),
+        api('/api/sources/'),
+        api('/api/scraper/status').catch(() => ({})),
+      ]);
+
+      const dateStr = new Date().toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+      document.getElementById('dash-subtitle').textContent =
+        `${dateStr} · Intelligence refreshed ${relTime(stats.last_scrape)}`;
+
+      // KPI cards
+      const active = sources.filter(s => s.is_active).length;
+      const paused = sources.length - active;
+      const comps  = sources.filter(s => s.category === 'competitor');
+      document.getElementById('stat-total-sources').textContent   = stats.total_sources;
+      document.getElementById('stat-active-sub').textContent      = `${active} active  ·  ${paused} paused`;
+      document.getElementById('stat-competitors').textContent     = comps.length;
+      document.getElementById('stat-competitors-sub').textContent = `${comps.filter(s=>s.is_active).length} active`;
+      document.getElementById('stat-chunks').textContent          = stats.total_chunks.toLocaleString();
+      document.getElementById('stat-last-scrape').textContent     = fmtDate(stats.last_scrape);
+
+      const freshnessEl = document.getElementById('stat-freshness');
+      if (stats.last_scrape) {
+        const hrs = (Date.now() - new Date(stats.last_scrape)) / 3600000;
+        if (hrs < 6)       { freshnessEl.textContent = '✓ Fresh';              freshnessEl.className = 'text-xs mt-1 text-emerald-400'; }
+        else if (hrs < 48) { freshnessEl.textContent = `${Math.round(hrs)}h old`; freshnessEl.className = 'text-xs mt-1 text-yellow-400'; }
+        else               { freshnessEl.textContent = 'Stale — rescrape advised'; freshnessEl.className = 'text-xs mt-1 text-red-400'; }
+      }
+
+      // Coverage by category
+      const cats = {
+        competitor: {count:0, chunks:0, pages:0},
+        news:       {count:0, chunks:0, pages:0},
+        market:     {count:0, chunks:0, pages:0},
+        general:    {count:0, chunks:0, pages:0},
+      };
+      sources.forEach(s => {
+        const c = cats[s.category] ?? cats.general;
+        c.count++; c.chunks += s.chunks_stored || 0; c.pages += s.pages_scraped || 0;
+      });
+      const maxChunks = Math.max(...Object.values(cats).map(c => c.chunks), 1);
+      const catColor = { competitor:'bg-violet-500', news:'bg-sky-500', market:'bg-emerald-500', general:'bg-slate-400' };
+      document.getElementById('coverage-list').innerHTML = Object.entries(cats).map(([cat, d]) => {
+        const pct    = Math.round((d.chunks / maxChunks) * 100);
+        const chunks = d.chunks >= 1000 ? `${(d.chunks/1000).toFixed(1)}k` : d.chunks;
+        return `<div>
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center gap-2">
+              ${badgeHtml(cat)}
+              <span class="text-xs text-slate-500">${d.count} source${d.count!==1?'s':''} &middot; ${d.pages} pages</span>
+            </div>
+            <span class="text-xs text-white font-semibold">${chunks} chunks</span>
+          </div>
+          <div class="bg-surface rounded-full h-1.5">
+            <div class="${catColor[cat]} rounded-full h-1.5" style="width:${Math.max(pct,2)}%"></div>
+          </div>
+        </div>`;
+      }).join('');
+
+      // Source health
+      const sorted = [...sources].sort((a,b) => (b.last_scraped_at||'').localeCompare(a.last_scraped_at||''));
+      document.getElementById('source-health-list').innerHTML = sorted.slice(0,10).map(s => {
+        const st  = statuses[s.id] || {};
+        const cfg = statusConfig(st.state);
+        const hrs = s.last_scraped_at ? (Date.now() - new Date(s.last_scraped_at)) / 3600000 : null;
+        const fc  = hrs === null ? 'text-slate-600' : hrs < 12 ? 'text-emerald-400' : hrs < 72 ? 'text-yellow-400' : 'text-red-400';
+        const newCount = (st.state === 'completed' && st.new_chunks > 0) ? st.new_chunks : 0;
+        return `<div class="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
+          <span class="status-dot status-${cfg.cls}" title="${cfg.label}"></span>
+          <span class="text-sm text-slate-200 flex-1 min-w-0 truncate">${esc(s.name)}</span>
+          ${badgeHtml(s.category)}
+          <span class="text-xs ${fc} shrink-0">${relTime(s.last_scraped_at)}</span>
+          ${newCount > 0 ? `<span class="text-xs font-semibold text-emerald-400 shrink-0">+${newCount} new</span>` : ''}
+          <span class="text-xs text-slate-600 shrink-0 w-16 text-right">${(s.chunks_stored||0).toLocaleString()} chunks</span>
+        </div>`;
+      }).join('');
+
+    } catch (e) {
+      document.getElementById('dash-subtitle').textContent = 'Error loading dashboard';
+      console.error(e);
+    }
+  }
+
+  // ── Sources sub-tabs ───────────────────────────────
+  function showSrcTab(tab) {
+    document.querySelectorAll('.src-tab-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.srcTab === tab)
+    );
+    document.getElementById('src-tab-list').classList.toggle('hidden', tab !== 'list');
+    document.getElementById('src-tab-content').classList.toggle('hidden', tab !== 'content');
+    if (tab === 'content') loadSrcContent();
+  }
+
+  async function loadSrcContent() {
+    const list = document.getElementById('content-list');
+    list.innerHTML = '<p class="text-slate-400 text-sm">Loading…</p>';
+    try {
+      const [content, sources] = await Promise.all([
+        api('/api/scraper/content?limit=30'),
+        api('/api/sources/'),
+      ]);
+      const srcMap = Object.fromEntries(sources.map(s => [s.id, s]));
+      if (!content.length) {
+        list.innerHTML = '<p class="text-slate-500 text-sm">No content yet. Add sources and scrape them.</p>';
+        return;
+      }
+      list.innerHTML = content.map(c => {
+        const src = srcMap[c.source_id] || {};
+        const chunks = c.metadata?.total_chunks > 1
+          ? `<span class="text-xs text-slate-500">chunk ${(c.metadata.chunk_index??0)+1}/${c.metadata.total_chunks}</span>` : '';
+        return `<div class="chunk-item bg-card border border-border rounded-xl p-4 flex items-start justify-between gap-3"
+             onclick="viewChunk('${c.id}')" title="Click to view full content">
+          <div class="min-w-0 flex-1">
+            <p class="font-medium text-white text-sm truncate">${esc(c.title || 'Untitled')}</p>
+            <p class="text-xs text-slate-400 mt-0.5 truncate">${esc(c.url)}</p>
+          </div>
+          <div class="flex flex-col items-end gap-1.5 shrink-0">
+            ${badgeHtml(src.category)}${chunks}
+            <span class="text-xs text-slate-500">${fmtDate(c.scraped_at)}</span>
+          </div>
+        </div>`;
+      }).join('');
+    } catch (e) {
+      list.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    }
+  }
+
+  async function showSourceUrls(sourceId, sourceName) {
+    const modal = document.getElementById('urls-modal');
+    const body  = document.getElementById('urls-modal-body');
+    const title = document.getElementById('urls-modal-title');
+    const count = document.getElementById('urls-modal-count');
+    title.textContent = sourceName;
+    count.textContent = 'Loading…';
+    body.innerHTML    = '';
+    modal.classList.add('open');
+    try {
+      const urls = await api(`/api/scraper/urls/${sourceId}`);
+      count.textContent = `${urls.length} page${urls.length !== 1 ? 's' : ''} scraped`;
+      body.innerHTML = urls.map(u => `
+        <a href="${esc(u.url)}" target="_blank" rel="noopener noreferrer"
+           class="flex items-start gap-2 px-3 py-2 rounded-lg hover:bg-surface transition group">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 shrink-0 mt-0.5 transition" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
+          </svg>
+          <div class="min-w-0">
+            <p class="text-sm text-slate-200 group-hover:text-blue-300 truncate transition">${esc(u.title || u.url)}</p>
+            <p class="text-xs text-slate-500 truncate">${esc(u.url)}</p>
+          </div>
+          <span class="text-xs text-slate-600 shrink-0 ml-auto">${fmtDate(u.scraped_at)}</span>
+        </a>`).join('');
+    } catch (e) {
+      body.innerHTML = `<p class="text-red-400 text-sm p-3">Error: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function closeUrlsModal() {
+    document.getElementById('urls-modal').classList.remove('open');
+  }
+
+  async function viewChunk(id) {
+    const modal = document.getElementById('chunk-modal');
+    const body  = document.getElementById('chunk-modal-body');
+    const title = document.getElementById('chunk-modal-title');
+    const meta  = document.getElementById('chunk-modal-meta');
+    body.textContent  = 'Loading…';
+    title.textContent = '';
+    meta.textContent  = '';
+    modal.classList.add('open');
+    try {
+      const c = await api(`/api/scraper/content/${id}`);
+      title.textContent = c.title || 'Untitled';
+      meta.textContent  = `${c.url}  ·  ${fmtDate(c.scraped_at)}  ·  ${c.metadata?.char_count ?? 0} chars`;
+      body.textContent  = c.content;
+    } catch (e) {
+      body.textContent = 'Error: ' + e.message;
+    }
+  }
+
+  function closeModal() {
+    document.getElementById('chunk-modal').classList.remove('open');
+  }
+
+  async function scrapeAll() {
+    try {
+      const r = await api('/api/scraper/run-all', { method: 'POST' });
+      showToast(r.message);
+    } catch (e) {
+      showToast(e.message, true);
+    }
+  }
+
+  // ── Competitors ──────────────────────────────────────────────────────────
+  async function loadCompetitors() {
+    const el = document.getElementById('competitors-list');
+    try {
+      const all = await api('/api/sources/');
+      const sources = all.filter(s => s.category === 'competitor');
+      if (!sources.length) {
+        el.innerHTML = '<p class="text-slate-500 text-sm">No competitor sources yet. Add sources with the "Competitor" category in the Sources tab.</p>';
+        return;
+      }
+      // Fetch current scrape statuses
+      const statuses = await api('/api/scraper/status').catch(() => ({}));
+      el.innerHTML = sources.map(s => buildCompetitorCard(s, statuses[s.id])).join('');
+      startStatusPolling();
+    } catch (e) {
+      el.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    }
+  }
+
+  let _pollTimer = null;
+  let _prevStates = {};
+
+  function startStatusPolling() {
+    if (_pollTimer) return;
+    _pollTimer = setInterval(async () => {
+      try {
+        const statuses = await api('/api/scraper/status');
+        let anyRunning = false;
+
+        for (const [sid, st] of Object.entries(statuses)) {
+          // Update Competitors tab badge
+          updateStatusBadge(sid, st);
+          // Update Sources tab dot
+          const srcDot = document.getElementById(`src-status-${sid}`);
+          if (srcDot) {
+            const cfg = statusConfig(st?.state);
+            srcDot.className = `status-dot status-${cfg.cls}`;
+            srcDot.title     = cfg.label;
+          }
+          // Detect running → done transition → refresh active tab data
+          const prev = _prevStates[sid]?.state;
+          if (prev === 'running' && st.state !== 'running') {
+            if (document.getElementById('page-sources')?.classList.contains('active'))     loadSources();
+            if (document.getElementById('page-dashboard')?.classList.contains('active'))   loadDashboard();
+            if (document.getElementById('page-competitors')?.classList.contains('active')) loadCompetitors();
+            if (document.getElementById('page-own')?.classList.contains('active'))         loadOwnSources();
+          }
+          if (st.state === 'running') anyRunning = true;
+        }
+        _prevStates = {...statuses};
+        if (!anyRunning) { clearInterval(_pollTimer); _pollTimer = null; }
+      } catch (_) {}
+    }, 2000);
+  }
+
+  function updateStatusBadge(sourceId, st) {
+    const badge  = document.getElementById(`status-badge-${sourceId}`);
+    const detail = document.getElementById(`status-detail-${sourceId}`);
+    if (!badge) return;
+    const cfg = statusConfig(st?.state, st?.detail);
+    badge.className  = `status-dot status-${cfg.cls}`;
+    badge.title      = cfg.label;
+    detail.textContent = cfg.detail;
+    detail.className = `text-xs mt-1 ${cfg.textCls}`;
+    const newBadge = document.getElementById(`new-chunks-badge-${sourceId}`);
+    if (newBadge) {
+      if (st?.state === 'completed' && st?.new_chunks > 0) {
+        newBadge.className = 'inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+        newBadge.title = 'New chunks from last scrape';
+        newBadge.textContent = `↑ +${st.new_chunks} new`;
+      } else if (st?.state !== 'running') {
+        newBadge.className = 'hidden';
+        newBadge.textContent = '';
+      }
+    }
+  }
+
+  function statusConfig(state, detail) {
+    switch (state) {
+      case 'running':   return { cls: 'running',   label: 'Scraping',  textCls: 'text-blue-400',   detail: detail || 'Running…' };
+      case 'completed': return { cls: 'completed', label: 'Complete',  textCls: 'text-emerald-500', detail: detail || 'Completed' };
+      case 'error':     return { cls: 'error',     label: 'Error',     textCls: 'text-red-400',     detail: detail || 'Error' };
+      default:          return { cls: 'idle',      label: 'Not scraped yet', textCls: 'text-slate-500', detail: '' };
+    }
+  }
+
+  function buildCompetitorCard(s, st) {
+    const hasSummary = s.summary && s.summary.trim();
+    const genDate    = s.summary_generated_at ? `Generated ${fmtDate(s.summary_generated_at)}` : '';
+    const cfg        = statusConfig(st?.state, st?.detail);
+    const newChunks  = (st?.state === 'completed' && st?.new_chunks > 0) ? st.new_chunks : 0;
+    return `
+      <div id="competitor-${s.id}" class="bg-card border border-border rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between gap-4 p-4 border-b border-border">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5">
+              <span id="status-badge-${s.id}" class="status-dot status-${cfg.cls}" title="${cfg.label}"></span>
+              <span class="font-semibold text-white">${esc(s.name)}</span>
+              ${badgeHtml(s.category)}
+              ${newChunks > 0 ? `<span id="new-chunks-badge-${s.id}" class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" title="New chunks from last scrape">↑ +${newChunks} new</span>` : `<span id="new-chunks-badge-${s.id}" class="hidden"></span>`}
+            </div>
+            <a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer"
+               class="text-xs text-slate-400 hover:text-blue-400 truncate block mt-0.5 ml-4">${esc(s.url)}</a>
+            <p id="status-detail-${s.id}" class="text-xs mt-1 ml-4 ${cfg.textCls}">${esc(cfg.detail)}</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            ${genDate ? `<span class="text-xs text-slate-500 hidden sm:block">${genDate}</span>` : ''}
+            <button onclick="generateSummary('${s.id}')" id="btn-${s.id}"
+              class="flex items-center gap-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 text-xs font-medium px-3 py-1.5 rounded-lg transition border border-blue-500/30">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+              </svg>
+              ${hasSummary ? 'Regenerate' : 'Generate Summary'}
+            </button>
+          </div>
+        </div>
+        <div id="summary-${s.id}" class="p-5 text-sm text-slate-300 leading-relaxed">
+          ${hasSummary
+            ? `<div class="prose-answer">${mdToHtml(s.summary)}</div>`
+            : `<p class="text-slate-500 italic">${s.chunks_stored > 0
+                ? 'No summary yet \u2014 click Generate Summary.'
+                : 'No content scraped yet. Go to Sources and scrape this source first.'}</p>`
+          }
+        </div>
+      </div>`;
+  }
+
+  async function generateSummary(sourceId) {
+    const btn     = document.getElementById(`btn-${sourceId}`);
+    const summDiv = document.getElementById(`summary-${sourceId}`);
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spinner"></span> Generating\u2026';
+    summDiv.innerHTML = '<div class="flex items-center gap-2 text-slate-500 text-sm"><span class="spinner"></span> Analysing content with GPT-4o\u2026</div>';
+    try {
+      const res = await api(`/api/insights/summary/${sourceId}`, { method: 'POST' });
+      summDiv.innerHTML = `<div class="prose-answer">${mdToHtml(res.summary)}</div>`;
+      btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg> Regenerate`;
+    } catch (e) {
+      summDiv.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+      btn.innerHTML = 'Retry';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function generateAllSummaries() {
+    const sources = await api('/api/sources/').catch(() => []);
+    for (const s of sources) {
+      if (s.chunks_stored > 0) await generateSummary(s.id);
+    }
+  }
+
+  // ── Competitive Landscape Matrix ─────────────────────
+  async function generateComparison() {
+    const btn  = document.getElementById('btn-comparison');
+    const body = document.getElementById('comparison-body');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Analysing…';
+    body.innerHTML = '<div class="flex items-center gap-2 text-slate-400 text-sm"><span class="spinner"></span> GPT-4o is analysing all competitor profiles…</div>';
+    try {
+      const data = await api('/api/insights/comparison', { method: 'POST' });
+      renderComparison(data);
+    } catch (e) {
+      body.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6"/></svg> Regenerate`;
+    }
+  }
+
+  function renderComparison(data) {
+    const body = document.getElementById('comparison-body');
+    const { strategic_context, competitors, uniqueness, strategic_implications } = data;
+    if (!competitors?.length) {
+      body.innerHTML = '<p class="text-slate-500 text-sm">No comparison data returned.</p>';
+      return;
+    }
+
+    // ── Badge helpers ────────────────────────────────────
+    const pricingBadge = m => {
+      const map = {
+        'Free':         'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+        'Freemium':     'text-violet-400 bg-violet-500/10 border-violet-500/30',
+        'Subscription': 'text-blue-400 bg-blue-500/10 border-blue-500/30',
+        'Usage-Based':  'text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
+        'Per-Seat':     'text-sky-400 bg-sky-500/10 border-sky-500/30',
+        'Enterprise':   'text-amber-400 bg-amber-500/10 border-amber-500/30',
+        'Open-Source':  'text-teal-400 bg-teal-500/10 border-teal-500/30',
+        'Unknown':      'text-slate-400 bg-slate-500/10 border-slate-500/30',
+      };
+      const cls = map[m] || map['Unknown'];
+      return `<span class="inline-block text-xs font-semibold px-2 py-0.5 rounded-full border ${cls}">${esc(m || 'Unknown')}</span>`;
+    };
+
+    const gtmBadge = m => {
+      const map = {
+        'PLG':         'text-indigo-400 bg-indigo-500/10 border-indigo-500/30',
+        'SLG':         'text-orange-400 bg-orange-500/10 border-orange-500/30',
+        'Channel':     'text-amber-400 bg-amber-500/10 border-amber-500/30',
+        'Community':   'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+        'Marketplace': 'text-violet-400 bg-violet-500/10 border-violet-500/30',
+        'Direct':      'text-blue-400 bg-blue-500/10 border-blue-500/30',
+        'Hybrid':      'text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
+        'Unknown':     'text-slate-400 bg-slate-500/10 border-slate-500/30',
+      };
+      const cls = map[m] || map['Unknown'];
+      return `<span class="inline-block text-xs font-semibold px-2 py-0.5 rounded-full border ${cls}">${esc(m || 'Unknown')}</span>`;
+    };
+
+    const pills = arr => (arr || []).map(o =>
+      `<span class="inline-block bg-slate-700/70 text-slate-300 text-xs px-2 py-0.5 rounded mr-1 mb-1">${esc(o)}</span>`
+    ).join('') || '—';
+
+    const bullets = arr => (arr || []).map(s =>
+      `<li class="flex items-start gap-1.5 text-sm text-slate-300"><span class="text-slate-500 mt-0.5">•</span>${esc(s)}</li>`
+    ).join('');
+
+    // ── Section groups ───────────────────────────────────
+    const groups = [
+      {
+        label: 'POSITIONING',
+        rows: [
+          { label: 'Positioning',       render: c => `<span class="text-slate-200">${esc(c.positioning)}</span>` },
+          { label: 'Target Market',     render: c => `<span class="text-slate-300">${esc(c.target_market)}</span>` },
+          { label: 'Value Proposition', render: c => `<span class="text-blue-300">${esc(c.value_proposition)}</span>` },
+        ],
+      },
+      {
+        label: 'PRODUCTS & SERVICES',
+        rows: [
+          { label: 'Key Products',      render: c => pills(c.key_products) },
+          { label: 'Differentiator',    render: c => `<span class="text-indigo-300">${esc(c.key_differentiator)}</span>` },
+          { label: 'Strengths',         render: c => `<ul class="space-y-1">${bullets(c.strengths)}</ul>` },
+        ],
+      },
+      {
+        label: 'GO-TO-MARKET',
+        rows: [
+          { label: 'GTM Motion',     render: c => gtmBadge(c.gtm_motion) },
+          { label: 'GTM Channels',   render: c => pills(c.gtm_channels) },
+          { label: 'Pricing Model',  render: c => pricingBadge(c.pricing_model) },
+          { label: 'Pricing Detail', render: c => `<span class="text-slate-400 text-xs">${esc(c.pricing_detail)}</span>` },
+        ],
+      },
+      {
+        label: 'KEY FINDINGS',
+        rows: [
+          { label: 'Key Findings', render: c => `<ol class="space-y-1.5">${(c.key_findings||[]).map((f,i) =>
+            `<li class="flex items-start gap-2 text-sm text-slate-300"><span class="shrink-0 text-slate-500 tabular-nums">${i+1}.</span>${esc(f)}</li>`
+          ).join('')}</ol>` },
+        ],
+      },
+    ];
+
+    const colW = 'min-w-[220px]';
+    const dimW = 'w-36';
+
+    const headerCols = competitors.map(c =>
+      `<th class="px-4 py-3 text-left text-white font-semibold text-sm ${colW} border-b border-border bg-surface/50">${esc(c.name)}</th>`
+    ).join('');
+
+    const tableBody = groups.map(g => {
+      const groupHeader = `
+        <tr>
+          <td colspan="${competitors.length + 1}"
+              class="px-4 pt-4 pb-1.5 text-xs font-bold text-slate-500 tracking-widest uppercase bg-surface/30 border-t border-border">${g.label}</td>
+        </tr>`;
+      const dataRows = g.rows.map(row => `
+        <tr class="border-t border-border/40 hover:bg-surface/20 transition-colors">
+          <td class="px-4 py-3 text-xs font-semibold text-slate-500 align-top whitespace-nowrap ${dimW} bg-surface/10">${row.label}</td>
+          ${competitors.map(c => `<td class="px-4 py-3 align-top leading-relaxed">${row.render(c)}</td>`).join('')}
+        </tr>`).join('');
+      return groupHeader + dataRows;
+    }).join('');
+
+    // ── What Makes Each Unique section ───────────────────
+    const uniquenessHtml = uniqueness?.length ? `
+      <div class="mt-6 pt-5 border-t border-border">
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">What Makes Each Unique</p>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          ${uniqueness.map(u => `
+            <div class="bg-surface/30 border border-border/50 rounded-xl p-4">
+              <p class="text-xs font-semibold text-indigo-300 mb-1.5">${esc(u.name)}</p>
+              <p class="text-sm text-slate-300 leading-relaxed">${esc(u.unique_angle)}</p>
+            </div>`).join('')}
+        </div>
+      </div>` : '';
+
+    // ── Strategic Implications section ───────────────────
+    const implsHtml = strategic_implications?.length ? `
+      <div class="mt-6 pt-5 border-t border-border">
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Strategic Implications</p>
+        <ol class="space-y-2.5">
+          ${strategic_implications.map((imp, i) => `
+            <li class="flex items-start gap-3 text-sm text-slate-300">
+              <span class="shrink-0 w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-300 text-xs flex items-center justify-center font-bold mt-0.5">${i + 1}</span>
+              <span>${esc(imp)}</span>
+            </li>`).join('')}
+        </ol>
+      </div>` : '';
+
+    body.innerHTML = `
+      ${strategic_context ? `<p class="text-sm text-slate-300 leading-relaxed border-l-2 border-indigo-500 pl-3 mb-5">${esc(strategic_context)}</p>` : ''}
+      <div class="overflow-x-auto rounded-lg border border-border/50">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="bg-surface/60">
+              <th class="px-4 py-3 text-xs text-slate-500 uppercase tracking-widest font-semibold ${dimW} border-b border-border">Dimension</th>
+              ${headerCols}
+            </tr>
+          </thead>
+          <tbody>${tableBody}</tbody>
+        </table>
+      </div>
+      ${uniquenessHtml}
+      ${implsHtml}`;
+  }
+
+  // ── News Feed ────────────────────────────────────────
+  let _newsCategory = 'news';
+  let _newsItems    = [];
+  let _newsOffset   = 0;
+  const _newsLimit  = 30;
+
+  async function loadNews(reset = true) {
+    if (reset) { _newsOffset = 0; _newsItems = []; }
+    const feed = document.getElementById('news-feed');
+    if (reset) feed.innerHTML = '<p class="text-slate-400 text-sm">Loading…</p>';
+    try {
+      const params = new URLSearchParams({ limit: _newsLimit, offset: _newsOffset });
+      if (_newsCategory) params.set('category', _newsCategory);
+      const items = await api(`/api/scraper/news?${params}`);
+      _newsItems  = reset ? items : [..._newsItems, ...items];
+      _newsOffset += items.length;
+      renderNewsItems(_newsItems);
+      document.getElementById('news-load-more').classList.toggle('hidden', items.length < _newsLimit);
+    } catch (e) {
+      feed.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    }
+  }
+
+  async function loadNewsDigest() {
+    const el  = document.getElementById('news-digest');
+    const btn = document.getElementById('digest-gen-btn');
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+    el.innerHTML = '<p class="text-slate-400 text-sm animate-pulse">Analysing the last 5 days of news…</p>';
+    try {
+      const data = await api('/api/scraper/news/digest');
+      if (data.error) {
+        el.innerHTML = `<p class="text-yellow-500 text-sm">${esc(data.error)}</p>`;
+        return;
+      }
+      renderNewsDigest(data);
+      const dt = document.getElementById('digest-date');
+      if (dt && data.generated_at) dt.textContent = '· ' + fmtDate(data.generated_at);
+    } catch(e) {
+      el.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Regenerate';
+    }
+  }
+
+  function renderNewsDigest(data) {
+    const { digest, articles } = data;
+    if (!digest) return;
+    const artMap = {};
+    (articles || []).forEach(a => { artMap[a.index] = a; });
+    const themesHtml = (digest.themes || []).map(t => {
+      const links = (t.article_indices || [])
+        .map(i => artMap[i]).filter(Boolean).slice(0, 4)
+        .map(a => `<a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer"
+          class="text-xs text-blue-400 hover:text-blue-300 hover:underline truncate block">${esc(a.title || a.url)}</a>`)
+        .join('');
+      return `<div class="border border-border rounded-lg p-3.5">
+        <p class="text-xs font-semibold text-slate-300 uppercase tracking-wide mb-1.5">${esc(t.theme)}</p>
+        <p class="text-sm text-slate-400 leading-relaxed mb-2">${esc(t.summary)}</p>
+        ${links ? `<div class="space-y-0.5 mt-2 border-t border-border pt-2">${links}</div>` : ''}
+      </div>`;
+    }).join('');
+    document.getElementById('news-digest').innerHTML = `
+      <div class="mb-4">
+        <p class="text-sm font-semibold text-white mb-1">${esc(digest.headline)}</p>
+        <p class="text-sm text-slate-400 leading-relaxed">${esc(digest.overview)}</p>
+      </div>
+      ${themesHtml ? `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">${themesHtml}</div>` : ''}
+      ${digest.strategic_takeaway ? `
+      <div class="bg-blue-950/30 border border-blue-800/30 rounded-lg px-4 py-3">
+        <p class="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-1">Strategic Takeaway</p>
+        <p class="text-sm text-slate-300">${esc(digest.strategic_takeaway)}</p>
+      </div>` : ''}`;
+  }
+
+  function filterNews() {
+    const q = document.getElementById('news-search').value.trim().toLowerCase();
+    if (!q) { renderNewsItems(_newsItems); return; }
+    renderNewsItems(_newsItems.filter(item =>
+      (item.title       || '').toLowerCase().includes(q) ||
+      (item.url         || '').toLowerCase().includes(q) ||
+      (item.snippet     || '').toLowerCase().includes(q) ||
+      (item.source_name || '').toLowerCase().includes(q)
+    ), true);
+  }
+
+  function renderNewsItems(items, filtered = false) {
+    const feed = document.getElementById('news-feed');
+    if (!items.length) {
+      feed.innerHTML = `<p class="text-slate-500 text-sm italic">${filtered
+        ? 'No results match your filter.'
+        : 'No content scraped yet — add sources and scrape them.'}</p>`;
+      return;
+    }
+    const catDot = { competitor:'bg-violet-500', news:'bg-sky-500', market:'bg-emerald-500', general:'bg-slate-500' };
+    feed.innerHTML = items.map(item => `
+      <div class="bg-card border border-border rounded-xl p-4 hover:border-slate-600 transition group">
+        <div class="flex items-start gap-3">
+          <span class="shrink-0 w-2 h-2 rounded-full mt-2 ${catDot[item.category] || 'bg-slate-500'}"></span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
+              <span class="text-xs font-semibold text-slate-400">${esc(item.source_name)}</span>
+              ${badgeHtml(item.category)}
+              <span class="text-xs text-slate-600 ml-auto shrink-0">${fmtDate(item.scraped_at)}</span>
+            </div>
+            <a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer"
+               class="font-medium text-white text-sm hover:text-blue-300 transition block mb-1 line-clamp-2">
+              ${esc(item.title || item.url)}
+            </a>
+            <p class="text-xs text-slate-500 truncate mb-2">${esc(item.url)}</p>
+            ${item.snippet ? `<p class="text-sm text-slate-400 leading-relaxed line-clamp-3">${esc(item.snippet)}</p>` : ''}
+          </div>
+          <button onclick="viewChunk('${item.id}')" title="View full content"
+            class="shrink-0 text-slate-600 hover:text-blue-400 transition opacity-0 group-hover:opacity-100 mt-0.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </button>
+        </div>
+      </div>`).join('');
+  }
+
+  async function loadMoreNews() { await loadNews(false); }
+
+  // ── My Company ──────────────────────────────────────
+  async function loadOwnSources() {
+    const el       = document.getElementById('own-sources-list');
+    const statsEl  = document.getElementById('own-stats');
+    try {
+      const [all, statuses] = await Promise.all([
+        api('/api/sources/'),
+        api('/api/scraper/status').catch(() => ({})),
+      ]);
+      const sources = all.filter(s => s.category === 'own');
+
+      // Stats strip
+      const totalChunks = sources.reduce((a, s) => a + (s.chunks_stored || 0), 0);
+      const totalPages  = sources.reduce((a, s) => a + (s.pages_scraped || 0), 0);
+      statsEl.innerHTML = [
+        { label: 'Sources',       value: sources.length,             color: 'text-orange-400' },
+        { label: 'Pages indexed', value: totalPages.toLocaleString(), color: 'text-slate-200'  },
+        { label: 'Chunks stored', value: totalChunks.toLocaleString(),color: 'text-slate-200'  },
+      ].map(s => `<div class="bg-card border border-border rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold ${s.color}">${s.value}</p>
+        <p class="text-xs text-slate-500 mt-1">${s.label}</p>
+      </div>`).join('');
+
+      if (!sources.length) {
+        el.innerHTML = '<p class="text-slate-500 text-sm">No company sources yet. Add your website or key pages above.</p>';
+        return;
+      }
+      el.innerHTML = sources.map(s => {
+        const st  = statuses[s.id] || {};
+        const cfg = statusConfig(st.state);
+        return `<div class="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-0.5">
+              <span class="font-semibold text-white text-sm">${esc(s.name)}</span>
+              ${badgeHtml(s.category)}
+              ${s.is_active ? '' : '<span class="badge badge-general">paused</span>'}
+            </div>
+            <p class="text-xs text-slate-400 truncate">${esc(s.url)}</p>
+            <div class="flex items-center gap-3 mt-1.5">
+              <span class="text-xs text-slate-500">Every ${s.scrape_interval}h</span>
+              <span class="text-xs text-slate-500">&middot;</span>
+              <span class="text-xs ${s.last_scraped_at ? 'text-slate-400' : 'text-slate-600'}">Last scraped: ${fmtDate(s.last_scraped_at)}</span>
+              ${s.pages_scraped > 0 ? `<span class="text-xs text-slate-500">&middot;</span>
+              <button onclick="showSourceUrls('${s.id}','${esc(s.name)}')"
+                class="text-xs text-orange-500 hover:text-orange-400 hover:underline transition">
+                ${s.pages_scraped} page${s.pages_scraped !== 1 ? 's' : ''}</button>
+              <span class="text-xs text-slate-600">(${s.chunks_stored} chunks)</span>` : ''}
+            </div>
+            <p id="status-detail-own-${s.id}" class="text-xs mt-1 ${cfg.textCls || 'text-slate-500'}">${cfg.detail || ''}</p>
+          </div>
+          <div class="flex gap-2 shrink-0 items-center">
+            <span id="src-status-${s.id}" class="status-dot status-${cfg.cls}" title="${cfg.label}"></span>
+            <button onclick="openAddUrlModal('${s.id}', '${esc(s.name)}')"
+              class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition" title="Add a specific URL">
+              + URL
+            </button>
+            <button onclick="scrapeOne('${s.id}', '${esc(s.name)}')"
+              class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
+              Scrape
+            </button>
+            <button onclick="toggleSource('${s.id}', ${!s.is_active})"
+              class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
+              ${s.is_active ? 'Pause' : 'Resume'}
+            </button>
+            <button onclick="deleteSource('${s.id}', '${esc(s.name)}');loadOwnSources()"
+              class="text-xs bg-red-900/50 hover:bg-red-800/70 text-red-300 px-3 py-1.5 rounded-lg transition">
+              Delete
+            </button>
+          </div>
+        </div>`;
+      }).join('');
+    } catch (e) {
+      el.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    }
+  }
+
+  async function addOwnSource(e) {
+    e.preventDefault();
+    const msg = document.getElementById('add-own-msg');
+    msg.textContent = '';
+    try {
+      await api('/api/sources/', {
+        method: 'POST',
+        body: JSON.stringify({
+          name:             document.getElementById('own-src-name').value.trim(),
+          url:              document.getElementById('own-src-url').value.trim(),
+          category:         'own',
+          scrape_interval:  parseInt(document.getElementById('own-src-interval').value, 10) || 24,
+        }),
+      });
+      document.getElementById('add-own-form').reset();
+      msg.className = 'text-sm text-emerald-400';
+      msg.textContent = 'Source added.';
+      loadOwnSources();
+    } catch (err) {
+      msg.className = 'text-sm text-red-400';
+      msg.textContent = err.message;
+    }
+  }
+
+  async function scrapeAllOwn() {
+    try {
+      const all  = await api('/api/sources/');
+      const own  = all.filter(s => s.category === 'own' && s.is_active);
+      await Promise.all(own.map(s => api(`/api/scraper/run/${s.id}`, { method: 'POST' })));
+      showToast(`Scraping ${own.length} company source${own.length !== 1 ? 's' : ''}…`);
+      startStatusPolling();
+    } catch (e) {
+      showToast(e.message, true);
+    }
+  }
+
+  // ── Sources ──────────────────────────────────────────
+  let _srcCategory = '';
+
+  function setSrcCategory(cat) {
+    _srcCategory = cat;
+    document.querySelectorAll('#src-category-pills .news-cat-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.cat === cat)
+    );
+    loadSources();
+  }
+
+  async function loadSources() {
+    const el = document.getElementById('sources-table');
+    try {
+      const all      = await api('/api/sources/');
+      const sources  = _srcCategory ? all.filter(s => s.category === _srcCategory) : all;
+      const statuses = await api('/api/scraper/status').catch(() => ({}));
+      if (!sources.length) {
+        el.innerHTML = '<p class="text-slate-500 text-sm">No sources in this category yet.</p>';
+        return;
+      }
+      el.innerHTML = sources.map(s => `
+        <div class="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-0.5">
+              <span class="font-semibold text-white text-sm">${esc(s.name)}</span>
+              ${badgeHtml(s.category)}
+              ${s.is_active ? '' : '<span class="badge badge-general">paused</span>'}
+            </div>
+            <p class="text-xs text-slate-400 truncate">${esc(s.url)}</p>
+              <div class="flex items-center gap-3 mt-1.5">
+                <span class="text-xs text-slate-500">Every ${s.scrape_interval}h</span>
+                <span class="text-xs text-slate-500">&middot;</span>
+                <span class="text-xs ${s.last_scraped_at ? 'text-slate-400' : 'text-slate-600'}">
+                  Last scraped: ${fmtDate(s.last_scraped_at)}
+                </span>
+                ${s.pages_scraped > 0 ? `
+                <span class="text-xs text-slate-500">&middot;</span>
+                <button onclick="showSourceUrls('${s.id}','${esc(s.name)}')"
+                  class="text-xs text-emerald-500 hover:text-emerald-400 hover:underline transition">
+                  ${s.pages_scraped} page${s.pages_scraped !== 1 ? 's' : ''}
+                </button>
+                <span class="text-xs text-slate-600">(${s.chunks_stored} chunks)</span>` : ''}
+              </div>              ${s.sitemap_url ? `
+              <div class="flex items-center gap-1.5 mt-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503-10.498l4.875 2.437c.381.19.622.58.622 1.006V17.25a.75.75 0 01-.437.688l-4.875 2.25a.75.75 0 01-.626 0l-4.875-2.25A.75.75 0 014.5 17.25V9.375c0-.426.24-.816.622-1.006l4.875-2.437a.75.75 0 01.756 0z"/>
+                </svg>
+                <a href="${esc(s.sitemap_url)}" target="_blank" rel="noopener noreferrer"
+                   class="text-xs text-blue-400 hover:text-blue-300 truncate" title="${esc(s.sitemap_url)}">
+                  Sitemap found
+                </a>
+              </div>` : `
+              <div class="flex items-center gap-1.5 mt-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                </svg>
+                <span class="text-xs text-slate-600">No sitemap</span>
+              </div>`}          </div>
+          <div class="flex gap-2 shrink-0 items-center">
+            <span id="src-status-${s.id}" class="status-dot status-${statusConfig(statuses[s.id]?.state).cls}"
+              title="${statusConfig(statuses[s.id]?.state).label}"></span>
+            <button onclick="openAddUrlModal('${s.id}', '${esc(s.name)}')"
+              class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition" title="Add a specific URL to this source">
+              + URL
+            </button>
+            <button onclick="scrapeOne('${s.id}', '${esc(s.name)}')"
+              class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
+              Scrape
+            </button>
+            <button onclick="toggleSource('${s.id}', ${!s.is_active})"
+              class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
+              ${s.is_active ? 'Pause' : 'Resume'}
+            </button>
+            <button onclick="deleteSource('${s.id}', '${esc(s.name)}')"
+              class="text-xs bg-red-900/50 hover:bg-red-800/70 text-red-300 px-3 py-1.5 rounded-lg transition">
+              Delete
+            </button>
+          </div>
+        </div>`).join('');
+    } catch (e) {
+      el.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    }
+  }
+
+  async function addSource(e) {
+    e.preventDefault();
+    const msg = document.getElementById('add-source-msg');
+    msg.textContent = '';
+    try {
+      await api('/api/sources/', {
+        method: 'POST',
+        body: JSON.stringify({
+          name:             document.getElementById('src-name').value.trim(),
+          url:              document.getElementById('src-url').value.trim(),
+          category:         document.getElementById('src-category').value,
+          scrape_interval:  parseInt(document.getElementById('src-interval').value, 10),
+        }),
+      });
+      document.getElementById('add-source-form').reset();
+      msg.className = 'text-sm text-emerald-400';
+      msg.textContent = 'Source added!';
+      loadSources();
+      setTimeout(() => msg.textContent = '', 3000);
+    } catch (err) {
+      msg.className = 'text-sm text-red-400';
+      msg.textContent = err.message;
+    }
+  }
+
+  async function scrapeOne(id, name) {
+    try {
+      const r = await api(`/api/scraper/run/${id}`, { method: 'POST' });
+      showToast(r.message);
+      // Optimistically show running dot immediately
+      const dot = document.getElementById(`src-status-${id}`);
+      if (dot) { dot.className = 'status-dot status-running'; dot.title = 'Scraping…'; }
+      startStatusPolling();
+    } catch (e) {
+      showToast(e.message, true);
+    }
+  }
+
+  async function toggleSource(id, active) {
+    try {
+      await api(`/api/sources/${id}`, { method: 'PUT', body: JSON.stringify({ is_active: active }) });
+      showToast(active ? 'Source resumed — will be included in scheduled scrapes.' : 'Source paused — scheduler will skip it.');
+      loadSources();
+    } catch (e) {
+      showToast(e.message, true);
+    }
+  }
+
+  async function deleteSource(id, name) {
+    if (!confirm(`Delete source "${name}" and all its content?`)) return;
+    try {
+      await api(`/api/sources/${id}`, { method: 'DELETE' });
+      loadSources();
+    } catch (e) {
+      showToast(e.message, true);
+    }
+  }
+
+  // ── Add URL to source ────────────────────────────────
+  let _addUrlSourceId = null;
+
+  function openAddUrlModal(sourceId, sourceName) {
+    _addUrlSourceId = sourceId;
+    document.getElementById('add-url-source-label').textContent = sourceName;
+    document.getElementById('add-url-input').value = '';
+    const st = document.getElementById('add-url-status');
+    st.className = 'text-sm mb-3 hidden';
+    st.textContent = '';
+    document.getElementById('add-url-submit').disabled = false;
+    document.getElementById('add-url-modal').classList.add('open');
+  }
+
+  function closeAddUrlModal() {
+    document.getElementById('add-url-modal').classList.remove('open');
+    _addUrlSourceId = null;
+  }
+
+  async function submitAddUrl() {
+    const url = document.getElementById('add-url-input').value.trim();
+    if (!url) return;
+    const st  = document.getElementById('add-url-status');
+    const btn = document.getElementById('add-url-submit');
+    btn.disabled = true;
+    st.className = 'text-sm mb-3 text-slate-400';
+    st.textContent = 'Fetching and indexing…';
+    try {
+      const r = await api(`/api/sources/${_addUrlSourceId}/add-url`, {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      });
+      st.className = 'text-sm mb-3 text-emerald-400';
+      st.textContent = `Indexed — ${r.new_chunks} new chunk(s) added for “${r.title || url}”`;
+      loadSources();
+    } catch (e) {
+      st.className = 'text-sm mb-3 text-red-400';
+      st.textContent = e.message;
+      btn.disabled = false;
+    }
+  }
+
+  let _changesData = null;
+
+  // ── Competitor change detection ───────────────────────
+  async function loadCompetitorChanges() {
+    const panel   = document.getElementById('changes-panel');
+    const content = document.getElementById('changes-content');
+    const btn     = document.getElementById('changes-btn');
+    if (!panel.classList.contains('hidden')) {
+      panel.classList.add('hidden');
+      return;
+    }
+    panel.classList.remove('hidden');
+    content.innerHTML = '<p class="text-slate-400 text-sm animate-pulse">Analysing competitor changes…</p>';
+    btn.disabled = true;
+    try {
+      const data = await api('/api/insights/competitor-changes');
+      renderCompetitorChanges(data);
+      _changesData = data;
+    } catch (e) {
+      content.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderCompetitorChanges(data) {
+    const content = document.getElementById('changes-content');
+    const results = data.results || [];
+    if (!results.length) {
+      content.innerHTML = '<p class="text-slate-500 text-sm">No active competitor sources found.</p>';
+      return;
+    }
+    const cards = results.map(r => {
+      const dot   = r.has_changes ? 'bg-amber-400' : 'bg-emerald-500';
+      const label = r.has_changes ? 'Changes detected' : 'No significant changes';
+      const labelCol = r.has_changes ? 'text-amber-400' : 'text-emerald-400';
+      const scrapeInfo = r.latest_scrape
+        ? `<span class="text-xs text-slate-600">Latest: ${fmtDate(r.latest_scrape)}${
+            r.previous_scrape ? ` &nbsp;&middot;&nbsp; Prev: ${fmtDate(r.previous_scrape)}` : ' &nbsp;&middot;&nbsp; <em>no previous scrape</em>'
+          }</span>` : '';
+      const changesHtml = (r.changes || []).length
+        ? `<ul class="mt-2 space-y-1">${r.changes.map(c =>
+            `<li class="flex items-start gap-1.5 text-xs text-amber-300"><span class="mt-1 shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400"></span>${esc(c)}</li>`
+          ).join('')}</ul>` : '';
+      const stableHtml = (r.stable || []).length
+        ? `<ul class="mt-1 space-y-0.5">${r.stable.map(s =>
+            `<li class="flex items-start gap-1.5 text-xs text-slate-500"><span class="mt-1 shrink-0 w-1.5 h-1.5 rounded-full bg-slate-600"></span>${esc(s)}</li>`
+          ).join('')}</ul>` : '';
+      return `<div class="bg-surface border border-border rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="w-2 h-2 rounded-full ${dot} shrink-0"></span>
+          <span class="font-semibold text-white text-sm">${esc(r.name)}</span>
+          <span class="text-xs ${labelCol} ml-auto">${label}</span>
+        </div>
+        ${scrapeInfo ? `<div class="mb-2">${scrapeInfo}</div>` : ''}
+        <p class="text-sm text-slate-400 leading-relaxed">${esc(r.summary)}</p>
+        ${changesHtml}${stableHtml}
+      </div>`;
+    }).join('');
+    content.innerHTML = `
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-white text-sm">Competitor Change Analysis <span class="text-xs font-normal text-slate-500">(last 7 days vs previous 30 days)</span></h3>
+        <div class="flex items-center gap-3">
+          <button onclick="exportChanges()" class="text-xs text-slate-400 hover:text-blue-400 transition">Export</button>
+          <button onclick="loadCompetitorChanges()" class="text-xs text-slate-400 hover:text-blue-400 transition">Hide</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${cards}</div>`;
+  }
+
+  // ── Export changes ─────────────────────────────────
+  function exportChanges() {
+    if (!_changesData) return;
+    const results = _changesData.results || [];
+    const dateStr = new Date().toLocaleDateString(undefined, {
+      weekday:'long', year:'numeric', month:'long', day:'numeric'
+    });
+    const sep  = '='.repeat(64);
+    const dash = '-'.repeat(64);
+    const lines = [];
+
+    lines.push('COMPETITOR INTELLIGENCE UPDATE');
+    lines.push(`Generated: ${dateStr}`);
+    lines.push('');
+    lines.push(sep);
+    lines.push('');
+    const withChanges = results.filter(r => r.has_changes).length;
+    lines.push('EXECUTIVE SUMMARY');
+    lines.push(`${results.length} competitor${results.length !== 1 ? 's' : ''} analysed. ` +
+      `${withChanges} showing meaningful changes since the previous scrape.`);
+    lines.push('');
+    lines.push(sep);
+
+    for (const r of results) {
+      lines.push('');
+      const status = r.has_changes ? '⚠ CHANGES DETECTED' : '✓ NO SIGNIFICANT CHANGES';
+      lines.push(`${r.name.toUpperCase()}  —  ${status}`);
+      if (r.latest_scrape || r.previous_scrape) {
+        const ls = r.latest_scrape   ? fmtDate(r.latest_scrape)   : '—';
+        const ps = r.previous_scrape ? fmtDate(r.previous_scrape) : 'no previous scrape';
+        lines.push(`Scrapes compared:  ${ls}  vs  ${ps}`);
+      }
+      lines.push('');
+      lines.push('Summary:');
+      lines.push(r.summary || '—');
+      if ((r.changes || []).length) {
+        lines.push('');
+        lines.push('What changed:');
+        r.changes.forEach(c => lines.push(`  • ${c}`));
+      }
+      if ((r.stable || []).length) {
+        lines.push('');
+        lines.push('Stable areas:');
+        r.stable.forEach(s => lines.push(`  • ${s}`));
+      }
+      lines.push('');
+      lines.push(dash);
+    }
+
+    lines.push('');
+    lines.push('Generated by StrategyHub');
+
+    document.getElementById('export-text').value = lines.join('\n');
+    const btn = document.getElementById('copy-export-btn');
+    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/></svg> Copy to Clipboard`;
+    document.getElementById('export-modal').classList.add('open');
+  }
+
+  function closeExportModal() {
+    document.getElementById('export-modal').classList.remove('open');
+  }
+
+  async function copyExport() {
+    const ta  = document.getElementById('export-text');
+    const btn = document.getElementById('copy-export-btn');
+    try {
+      await navigator.clipboard.writeText(ta.value);
+      btn.textContent = '✓ Copied!';
+      setTimeout(() => {
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/></svg> Copy to Clipboard`;
+      }, 2000);
+    } catch (_) {
+      ta.select();
+    }
+  }
+
+  // ── GTM Heatmap ─────────────────────────────────────
+  let _gtmData = null;
+  let _gtmLens  = 'both';
+  const GTM_STRENGTH_BG    = ['rgba(30,41,59,0.25)','rgba(71,85,105,0.65)','rgba(146,64,14,0.60)','rgba(194,65,12,0.80)','rgba(185,28,28,0.90)'];
+  const GTM_STRENGTH_LABEL = ['','Weak','Moderate','Strong','Dominant'];
+  const GTM_STRENGTH_TEXT  = ['#475569','#94a3b8','#fcd34d','#fb923c','#fca5a5'];
+
+  async function loadGtmHeatmap() {
+    const btn = document.getElementById('gtm-refresh-btn');
+    const loading = document.getElementById('gtm-loading');
+    const errEl   = document.getElementById('gtm-error');
+    const empty   = document.getElementById('gtm-empty');
+    const tWrap   = document.getElementById('gtm-table-wrap');
+    const legend  = document.getElementById('gtm-legend');
+    const cardsEl = document.getElementById('gtm-cards');
+    btn.disabled = true;
+    loading.classList.remove('hidden');
+    [errEl, empty, tWrap, legend, cardsEl].forEach(el => el.classList.add('hidden'));
+    try {
+      const data = await api('/api/insights/gtm-heatmap');
+      _gtmData = data;
+      renderGtmHeatmap(data);
+    } catch (e) {
+      errEl.textContent = 'Error: ' + e.message;
+      errEl.classList.remove('hidden');
+      empty.classList.remove('hidden');
+    } finally {
+      loading.classList.add('hidden');
+      btn.disabled = false;
+    }
+  }
+
+  function renderGtmHeatmap(data) {
+    const tWrap   = document.getElementById('gtm-table-wrap');
+    const legend  = document.getElementById('gtm-legend');
+    const cardsEl = document.getElementById('gtm-cards');
+    const empty   = document.getElementById('gtm-empty');
+    const segments    = data.segments    || [];
+    const competitors = data.competitors || [];
+    if (!segments.length || !competitors.length) {
+      empty.textContent = 'Not enough competitor data. Scrape your competitors first.';
+      empty.classList.remove('hidden');
+      return;
+    }
+    const cellMap = {};
+    for (const c of (data.cells || [])) cellMap[c.segment_id + '::' + c.competitor_id] = c;
+
+    // Rebuild thead
+    const theadRow = document.getElementById('gtm-thead-row');
+    while (theadRow.children.length > 1) theadRow.removeChild(theadRow.lastChild);
+    for (const comp of competitors) {
+      const th = document.createElement('th');
+      th.scope = 'col';
+      th.className = 'text-center text-xs font-semibold text-slate-400 uppercase tracking-wide px-2 py-3 min-w-[90px]';
+      th.textContent = comp.name;
+      theadRow.appendChild(th);
+    }
+    const stTh = document.createElement('th');
+    stTh.scope = 'col';
+    stTh.className = 'text-center text-xs font-semibold text-slate-400 uppercase tracking-wide px-3 py-3 min-w-[100px] border-l border-border/30';
+    stTh.textContent = 'Status';
+    theadRow.appendChild(stTh);
+
+    // Build rows
+    const tbody = document.getElementById('gtm-tbody');
+    tbody.innerHTML = '';
+    const STATUS_MAP = {
+      safe:      { cls: 'bg-emerald-900/40 text-emerald-400 border-emerald-800/50', label: 'Safe' },
+      contested: { cls: 'bg-amber-900/40 text-amber-400 border-amber-800/50',       label: 'Contested' },
+      'at-risk': { cls: 'bg-red-900/40 text-red-400 border-red-800/50',             label: 'At Risk' },
+    };
+    for (const seg of segments) {
+      const tr = document.createElement('tr');
+      tr.className = 'border-t border-border/40 hover:bg-slate-800/20 transition';
+
+      const nameTd = document.createElement('td');
+      nameTd.className = 'px-4 py-3 sticky left-0 bg-surface z-10 border-r border-border/30 align-top';
+      nameTd.innerHTML = '<div class="font-medium text-slate-200 text-sm leading-snug">' + esc(seg.name) + '</div>' +
+        (seg.description ? '<div class="text-xs text-slate-500 mt-0.5 max-w-xs leading-snug">' + esc(seg.description) + '</div>' : '');
+      tr.appendChild(nameTd);
+
+      for (const comp of competitors) {
+        const cell     = cellMap[seg.id + '::' + comp.id] || { strength:0, trajectory:'flat', encroachment:0 };
+        const strength = Math.min(4, Math.max(0, cell.strength     || 0));
+        const encroach = Math.min(2, Math.max(0, cell.encroachment || 0));
+        const traj     = cell.trajectory || 'flat';
+        const ring     = encroach === 0 ? '' : encroach === 1
+          ? 'box-shadow:0 0 0 2px rgba(251,191,36,0.75);'
+          : 'box-shadow:0 0 0 3px rgba(239,68,68,0.90);';
+        const arrowCol = traj === 'up' ? '#4ade80' : traj === 'down' ? '#f87171' : '#64748b';
+        const arrowSym = traj === 'up' ? '&#8593;' : traj === 'down' ? '&#8595;' : '&#8594;';
+        const td = document.createElement('td');
+        td.className = 'p-1.5 border-l border-border/20 align-middle';
+        const div = document.createElement('div');
+        div.className = 'gtm-cell relative rounded-lg flex items-center justify-center transition-opacity';
+        div.style.cssText = 'min-width:80px;height:56px;background:' + GTM_STRENGTH_BG[strength] + ';' + ring;
+        div.dataset.strength     = strength;
+        div.dataset.encroachment = encroach;
+        div.dataset.trajectory   = traj;
+        div.title = comp.name + ' × ' + seg.name + ': ' + (GTM_STRENGTH_LABEL[strength]||'No presence') + ' | ' + traj + ' | encroach ' + encroach;
+        if (strength > 0 || encroach > 0) {
+          div.innerHTML = '<span class="absolute top-1 right-1.5 text-xs font-bold" style="color:' + arrowCol + '">' + arrowSym + '</span>' +
+            (strength > 0 ? '<span class="text-xs font-semibold" style="color:' + GTM_STRENGTH_TEXT[strength] + '">' + GTM_STRENGTH_LABEL[strength] + '</span>' : '');
+        }
+        td.appendChild(div);
+        tr.appendChild(td);
+      }
+
+      const stTd = document.createElement('td');
+      stTd.className = 'px-3 py-3 text-center border-l border-border/20 align-middle';
+      const st = STATUS_MAP[seg.status] || STATUS_MAP.contested;
+      stTd.innerHTML = '<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ' + st.cls + '">' + st.label + '</span>';
+      tr.appendChild(stTd);
+      tbody.appendChild(tr);
+    }
+
+    tWrap.classList.remove('hidden');
+    legend.classList.remove('hidden');
+    cardsEl.classList.remove('hidden');
+    empty.classList.add('hidden');
+    _renderGtmCards(data);
+    applyGtmLens();
+  }
+
+  function _renderGtmCards(data) {
+    function buildCard(id, cfg, accentCls, dotCls, iconHtml) {
+      const segs = (cfg.segments||[]).map(s =>
+        '<span class="text-xs ' + accentCls + ' px-2 py-0.5 rounded-full border">' + esc(s) + '</span>'
+      ).join('');
+      const acts = (cfg.actions||[]).map(a =>
+        '<li class="flex items-start gap-2 text-xs text-slate-300"><span class="mt-1 shrink-0 w-1.5 h-1.5 rounded-full ' + dotCls + '"></span>' + esc(a) + '</li>'
+      ).join('');
+      document.getElementById(id).innerHTML =
+        '<div class="flex items-start gap-3 mb-3">' + iconHtml +
+        '<div><p class="text-sm font-semibold text-white leading-snug">' + esc(cfg.headline||'No recommendation.') + '</p></div></div>' +
+        (segs ? '<div class="flex flex-wrap gap-1.5 mb-3">' + segs + '</div>' : '') +
+        (cfg.rationale ? '<p class="text-sm text-slate-400 leading-relaxed mb-3">' + esc(cfg.rationale) + '</p>' : '') +
+        (acts ? '<ul class="space-y-1.5">' + acts + '</ul>' : '');
+    }
+    buildCard('gtm-defend-card', data.defend||{},
+      'text-red-300 bg-red-900/30 border-red-800/40', 'bg-red-500',
+      '<div class="w-8 h-8 shrink-0 rounded-lg bg-red-900/40 border border-red-800/50 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.955 11.955 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg></div>'
+    );
+    buildCard('gtm-attack-card', data.attack||{},
+      'text-emerald-300 bg-emerald-900/30 border-emerald-800/40', 'bg-emerald-500',
+      '<div class="w-8 h-8 shrink-0 rounded-lg bg-emerald-900/40 border border-emerald-800/50 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/></svg></div>'
+    );
+  }
+
+  function setGtmLens(lens) {
+    _gtmLens = lens;
+    document.querySelectorAll('.gtm-lens-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.lens === lens)
+    );
+    applyGtmLens();
+  }
+
+  function applyGtmLens() {
+    document.querySelectorAll('.gtm-cell').forEach(cell => {
+      const s = parseInt(cell.dataset.strength,     10) || 0;
+      const e = parseInt(cell.dataset.encroachment, 10) || 0;
+      const dim = _gtmLens === 'defense' ? e === 0 : _gtmLens === 'offense' ? s >= 3 : false;
+      cell.style.opacity = dim ? '0.12' : '1';
+    });
+  }
+
+  // ── Positioning Teardown ─────────────────────────────
+  let _teardownData = null;
+
+  function showGtmTab(tab) {
+    ['heatmap','positioning'].forEach(t => {
+      document.getElementById('gtm-sub-' + t).classList.toggle('hidden', t !== tab);
+      const btn = document.querySelector('[data-gtm-tab="' + t + '"]');
+      btn.classList.toggle('active', t === tab);
+      btn.setAttribute('aria-selected', t === tab ? 'true' : 'false');
+    });
+  }
+
+  async function loadPositioningTeardown() {
+    const btn     = document.getElementById('td-refresh-btn');
+    const loading = document.getElementById('td-loading');
+    const errEl   = document.getElementById('td-error');
+    const grid    = document.getElementById('td-grid');
+    const empty   = document.getElementById('td-empty');
+    btn.disabled = true;
+    loading.classList.remove('hidden');
+    [errEl, grid, empty].forEach(el => el.classList.add('hidden'));
+    try {
+      const data = await api('/api/insights/positioning-teardown');
+      _teardownData = data;
+      renderPositioningTeardown(data);
+    } catch (e) {
+      errEl.textContent = 'Error: ' + e.message;
+      errEl.classList.remove('hidden');
+      empty.classList.remove('hidden');
+    } finally {
+      loading.classList.add('hidden');
+      btn.disabled = false;
+    }
+  }
+
+  function renderPositioningTeardown(data) {
+    const grid  = document.getElementById('td-grid');
+    const empty = document.getElementById('td-empty');
+    const list  = (data.competitors || []).slice();
+    if (!list.length) { empty.classList.remove('hidden'); return; }
+    list.sort((a, b) => (a.type === 'you' ? -1 : b.type === 'you' ? 1 : 0));
+    grid.innerHTML = list.map(c => buildTeardownCard(c)).join('');
+    grid.classList.remove('hidden');
+    empty.classList.add('hidden');
+  }
+
+  function buildTeardownCard(c) {
+    const cardStyle  = 'background:rgba(30,41,59,0.45);border:1px solid rgba(51,65,85,0.8);';
+    const hairline   = 'border-color:rgba(255,255,255,0.07)';
+
+    const FIELDS = [
+      { key:'against', label:'AGAINST' },
+      { key:'for',     label:'FOR'     },
+      { key:'claim',   label:'CLAIM'   },
+      { key:'proof',   label:'PROOF'   },
+    ];
+    const rows = FIELDS.map((f, i) => {
+      const raw = c[f.key] || null;
+      const valHtml = !raw
+        ? '<span style="color:#4b5563">&mdash;</span>'
+        : f.key === 'claim'
+          ? '<span class="td-claim">&ldquo;' + esc(raw) + '&rdquo;</span>'
+          : '<span class="td-value">' + esc(raw) + '</span>';
+      return '<div class="flex gap-3 py-3' + (i > 0 ? ' border-t' : '') + '"'
+        + (i > 0 ? ' style="' + hairline + '"' : '') + ' role="row">'
+        + '<span class="td-label w-[4.5rem] shrink-0 pt-0.5" aria-label="' + f.label + '">' + f.label + '</span>'
+        + '<div class="flex-1 min-w-0">' + valHtml + '</div></div>';
+    }).join('');
+
+    return '<article class="rounded-xl p-5 flex flex-col focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"'
+      + ' style="' + cardStyle + '" tabindex="0" aria-label="' + esc(c.name) + ' positioning teardown">'
+      + '<header class="flex items-center gap-2 pb-3 mb-1" style="border-bottom:1px solid rgba(255,255,255,0.07)">'
+        + '<span class="font-bold text-sm">' + esc(c.name) + '</span>'
+      + '</header>'
+      + '<div role="table" aria-label="' + esc(c.name) + ' positioning fields">' + rows + '</div>'
+      + '</article>';
+  }
+
+  // ── Utilities ────────────────────────────────────────
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+
+  /** Minimal markdown → HTML (bold, italic, inline code, line breaks) */
+  function mdToHtml(text) {
+    return esc(text)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g,     '<em>$1</em>')
+      .replace(/`(.+?)`/g,       '<code class="bg-slate-700 px-1 rounded text-xs">$1</code>')
+      .replace(/\[Source (\d+)\]/g, '<span class="text-blue-400 font-medium">[Source $1]</span>')
+      .replace(/\n/g, '<br/>');
+  }
+
+  let _toastTimer;
+  function showToast(msg, error = false) {
+    let el = document.getElementById('toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'toast';
+      el.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;z-index:99;padding:.6rem 1.1rem;border-radius:.75rem;font-size:.85rem;font-weight:500;transition:opacity .3s;';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.background = error ? '#7f1d1d' : '#14532d';
+    el.style.color       = error ? '#fca5a5' : '#6ee7b7';
+    el.style.opacity     = '1';
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 3500);
+  }
+
+  // ── Boot ─────────────────────────────────────────────
+  loadDashboard();
+  </script>
+</body>
+</html>
