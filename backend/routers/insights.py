@@ -196,36 +196,61 @@ async def gtm_heatmap():
             "No active competitor sources found. Add competitors in the Sources tab first.",
         )
 
-    competitors_data = []
-    for src in sources:
+    async def _build_content(src: dict, limit: int = 18, max_chars: int = 2400) -> str:
         content_res = await asyncio.to_thread(
             lambda sid=src["id"]: db.table("scraped_content")
             .select("content")
             .eq("source_id", sid)
             .order("scraped_at", desc=True)
-            .limit(18)
+            .limit(limit)
             .execute()
         )
-        rows = content_res.data or []
         seen: set[str] = set()
         parts: list[str] = []
         total = 0
-        for row in rows:
+        for row in (content_res.data or []):
             chunk = (row.get("content") or "").strip()
             if not chunk or chunk in seen:
                 continue
             seen.add(chunk)
             parts.append(chunk[:400])
             total += len(chunk)
-            if total >= 2400:
+            if total >= max_chars:
                 break
+        return "\n\n".join(parts) or "No content scraped yet."
+
+    competitors_data = []
+    for src in sources:
         competitors_data.append({
             "name": src["name"],
             "url": src["url"],
-            "content_summary": "\n\n".join(parts) or "No content scraped yet.",
+            "content_summary": await _build_content(src),
         })
 
-    return await generate_gtm_heatmap(competitors_data)
+    # Include own company as baseline reference if available
+    own_res = await asyncio.to_thread(
+        lambda: db.table("sources")
+        .select("id, name, url")
+        .eq("is_active", True)
+        .eq("category", "own")
+        .execute()
+    )
+    own_company = None
+    if own_res.data:
+        src = own_res.data[0]
+        own_company = {
+            "name": src["name"],
+            "url": src["url"],
+            "content_summary": await _build_content(src),
+        }
+
+    result = await generate_gtm_heatmap(competitors_data, own_company=own_company)
+    # Flag own company competitor so frontend can highlight it
+    if own_company:
+        for c in result.get("competitors", []):
+            if c.get("id") == "own-company" or c.get("name") == own_company["name"]:
+                c["is_own"] = True
+    return result
 
 
 @router.get("/positioning-teardown")
@@ -244,33 +269,52 @@ async def positioning_teardown():
     if not sources:
         raise HTTPException(400, "No active competitor sources found. Add competitors in the Sources tab first.")
 
-    competitors_data = []
-    for src in sources:
+    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
         content_res = await asyncio.to_thread(
             lambda sid=src["id"]: db.table("scraped_content")
             .select("content")
             .eq("source_id", sid)
             .order("scraped_at", desc=True)
-            .limit(12)
+            .limit(limit)
             .execute()
         )
-        rows = content_res.data or []
         seen: set[str] = set()
         parts: list[str] = []
         total = 0
-        for row in rows:
+        for row in (content_res.data or []):
             chunk = (row.get("content") or "").strip()
             if not chunk or chunk in seen:
                 continue
             seen.add(chunk)
             parts.append(chunk[:400])
             total += len(chunk)
-            if total >= 2000:
+            if total >= max_chars:
                 break
+        return "\n\n".join(parts) or "No content scraped yet."
+
+    competitors_data = []
+    for src in sources:
         competitors_data.append({
             "name": src["name"],
             "url": src["url"],
-            "content_summary": "\n\n".join(parts) or "No content scraped yet.",
+            "content_summary": await _build_content(src),
         })
 
-    return await generate_positioning_teardown(competitors_data)
+    # Include own company as the reference baseline if available
+    own_res = await asyncio.to_thread(
+        lambda: db.table("sources")
+        .select("id, name, url")
+        .eq("is_active", True)
+        .eq("category", "own")
+        .execute()
+    )
+    own_company = None
+    if own_res.data:
+        src = own_res.data[0]
+        own_company = {
+            "name": src["name"],
+            "url": src["url"],
+            "content_summary": await _build_content(src),
+        }
+
+    return await generate_positioning_teardown(competitors_data, own_company=own_company)

@@ -315,24 +315,35 @@ async def generate_news_digest(articles: list[dict]) -> dict:
     return _json.loads(raw)
 
 
-async def generate_gtm_heatmap(competitors: list[dict]) -> dict:
+async def generate_gtm_heatmap(competitors: list[dict], own_company: dict | None = None) -> dict:
     """
     Given a list of {name, url, content_summary} dicts, produce an ICP × competitor
     heatmap with per-cell strength/trajectory/encroachment scores and defend/attack cards.
+    If own_company is provided it is included as the first column so the user can see
+    their own segment coverage vs the competitive landscape.
     """
     import json as _json
 
+    all_entries = ([own_company] if own_company else []) + competitors
     parts = [
-        f"## {c['name']} ({c['url']})\n{c['content_summary']}"
-        for c in competitors
+        f"## {'YOUR COMPANY: ' if own_company and c is own_company else ''}{c['name']} ({c['url']})\n{c['content_summary']}"
+        for c in all_entries
     ]
     context = "\n\n---\n\n".join(parts)
 
+    own_note = (
+        f"The first company ('YOUR COMPANY: {own_company['name']}') is the user's own company. "
+        "Include it as the first entry in the competitors array with id='own-company'. "
+        "The Defend and Attack recommendations should be written from that company's perspective. "
+        if own_company else ""
+    )
+
     system_prompt = (
         "You are a Go-to-Market strategist mapping a competitive landscape. "
-        "Analyse the competitor website content below and:\n"
+        f"{own_note}"
+        "Analyse the website content below and:\n"
         "1. Identify 5-7 distinct customer segments / ICPs present in this market.\n"
-        "2. Score each competitor in each segment.\n"
+        "2. Score each company in each segment.\n"
         "3. Produce Defend and Attack recommendations.\n"
         "Return ONLY valid JSON with no markdown fences. Use this exact schema:\n"
         "{\n"
@@ -393,28 +404,37 @@ async def generate_gtm_heatmap(competitors: list[dict]) -> dict:
         return {}
 
 
-async def generate_positioning_teardown(competitors: list[dict]) -> dict:
+async def generate_positioning_teardown(competitors: list[dict], own_company: dict | None = None) -> dict:
     """
     Reconstruct each competitor's positioning into four fixed fields:
     against, for, claim, proof. Also classify type: you | legacy | ai.
-    Exactly one competitor receives type='you' (the dominant incumbent / category leader).
+    If own_company is provided it is included as the first card with type='you'.
     """
     import json as _json
 
+    all_entries = ([own_company] if own_company else []) + competitors
     parts = [
-        f"## {c['name']} ({c['url']})\n{c['content_summary']}"
-        for c in competitors
+        f"## {'YOUR COMPANY: ' if own_company and c is own_company else ''}{c['name']} ({c['url']})\n{c['content_summary']}"
+        for c in all_entries
     ]
     context = "\n\n---\n\n".join(parts)
 
+    own_note = (
+        f"The first company ('YOUR COMPANY: {own_company['name']}') is the user's own company — assign it type='you'. "
+        "For each competitor, frame the 'against' field in terms of how they position relative to "
+        f"{own_company['name']} and the competitive landscape. "
+        if own_company else
+        "Assign exactly ONE competitor type='you' (the dominant category incumbent everyone else reacts against).\n"
+    )
+
     system_prompt = (
-        "You are a positioning strategist. Analyse the competitor website content and "
-        "reconstruct each competitor's positioning into four fixed fields.\n"
-        "Classify each as:\n"
-        "  'you'    — the dominant category incumbent everyone else reacts against\n"
+        "You are a positioning strategist. Analyse the website content and "
+        "reconstruct each company's positioning into four fixed fields.\n"
+        + own_note +
+        "Classify each company as:\n"
+        "  'you'    — the user's own company (or dominant incumbent if none provided)\n"
         "  'legacy' — established but not the dominant reference point\n"
         "  'ai'     — AI-native startup\n"
-        "Assign exactly ONE competitor type='you'.\n"
         "Return ONLY valid JSON with no markdown fences. Schema:\n"
         "{\n"
         "  \"competitors\": [\n"

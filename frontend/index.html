@@ -1883,8 +1883,14 @@
     for (const comp of competitors) {
       const th = document.createElement('th');
       th.scope = 'col';
-      th.className = 'text-center text-xs font-semibold text-slate-400 uppercase tracking-wide px-2 py-3 min-w-[90px]';
-      th.textContent = comp.name;
+      if (comp.is_own) {
+        th.className = 'text-center text-xs font-semibold uppercase tracking-wide px-2 py-3 min-w-[90px]';
+        th.style.cssText = 'color:#fb923c';
+        th.innerHTML = esc(comp.name) + '<br><span style="font-size:9px;opacity:.75;text-transform:none;letter-spacing:0">Your Company</span>';
+      } else {
+        th.className = 'text-center text-xs font-semibold text-slate-400 uppercase tracking-wide px-2 py-3 min-w-[90px]';
+        th.textContent = comp.name;
+      }
       theadRow.appendChild(th);
     }
     const stTh = document.createElement('th');
@@ -2043,8 +2049,11 @@
   }
 
   function buildTeardownCard(c) {
-    const cardStyle  = 'background:rgba(30,41,59,0.45);border:1px solid rgba(51,65,85,0.8);';
-    const hairline   = 'border-color:rgba(255,255,255,0.07)';
+    const isOwn      = c.type === 'you';
+    const cardStyle  = isOwn
+      ? 'background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.4);'
+      : 'background:rgba(30,41,59,0.45);border:1px solid rgba(51,65,85,0.8);';
+    const hairline   = isOwn ? 'border-color:rgba(251,146,60,0.2)' : 'border-color:rgba(255,255,255,0.07)';
 
     const FIELDS = [
       { key:'against', label:'AGAINST' },
@@ -2065,10 +2074,15 @@
         + '<div class="flex-1 min-w-0">' + valHtml + '</div></div>';
     }).join('');
 
+    const ownBadge = isOwn
+      ? '<span class="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded" style="background:rgba(251,146,60,0.18);color:#fb923c">YOUR COMPANY</span>'
+      : '';
+
     return '<article class="rounded-xl p-5 flex flex-col focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"'
       + ' style="' + cardStyle + '" tabindex="0" aria-label="' + esc(c.name) + ' positioning teardown">'
-      + '<header class="flex items-center gap-2 pb-3 mb-1" style="border-bottom:1px solid rgba(255,255,255,0.07)">'
+      + '<header class="flex items-center gap-2 pb-3 mb-1" style="border-bottom:1px solid ' + (isOwn ? 'rgba(251,146,60,0.25)' : 'rgba(255,255,255,0.07)') + '">'
         + '<span class="font-bold text-sm">' + esc(c.name) + '</span>'
+        + ownBadge
       + '</header>'
       + '<div role="table" aria-label="' + esc(c.name) + ' positioning fields">' + rows + '</div>'
       + '</article>';
