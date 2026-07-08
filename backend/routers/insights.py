@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from ..database import get_db
 from ..models.schemas import ChatMessage
-from ..services.llm import chat_with_context, generate_source_summary, generate_comparison, generate_competitor_changes, generate_gtm_heatmap, generate_positioning_teardown
+from ..services.llm import chat_with_context, generate_source_summary, generate_comparison, generate_competitor_changes, generate_gtm_heatmap, generate_positioning_teardown, generate_campaign_messaging
 
 router = APIRouter()
 
@@ -318,3 +318,69 @@ async def positioning_teardown():
         }
 
     return await generate_positioning_teardown(competitors_data, own_company=own_company)
+
+
+@router.get("/campaign-messaging")
+async def campaign_messaging():
+    """Generate campaign messaging suggestions across five channels using competitor + own company intelligence."""
+    db = get_db()
+
+    sources_res = await asyncio.to_thread(
+        lambda: db.table("sources")
+        .select("id, name, url")
+        .eq("is_active", True)
+        .eq("category", "competitor")
+        .execute()
+    )
+    sources = sources_res.data or []
+    if not sources:
+        raise HTTPException(400, "No active competitor sources found. Add competitors in the Sources tab first.")
+
+    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
+        content_res = await asyncio.to_thread(
+            lambda sid=src["id"]: db.table("scraped_content")
+            .select("content")
+            .eq("source_id", sid)
+            .order("scraped_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        seen: set[str] = set()
+        parts: list[str] = []
+        total = 0
+        for row in (content_res.data or []):
+            chunk = (row.get("content") or "").strip()
+            if not chunk or chunk in seen:
+                continue
+            seen.add(chunk)
+            parts.append(chunk[:400])
+            total += len(chunk)
+            if total >= max_chars:
+                break
+        return "\n\n".join(parts) or "No content scraped yet."
+
+    competitors_data = []
+    for src in sources:
+        competitors_data.append({
+            "name": src["name"],
+            "url": src["url"],
+            "content_summary": await _build_content(src),
+        })
+
+    own_res = await asyncio.to_thread(
+        lambda: db.table("sources")
+        .select("id, name, url")
+        .eq("is_active", True)
+        .eq("category", "own")
+        .execute()
+    )
+    own_company = None
+    if own_res.data:
+        src = own_res.data[0]
+        own_company = {
+            "name": src["name"],
+            "url": src["url"],
+            "content_summary": await _build_content(src),
+        }
+
+    return await generate_campaign_messaging(competitors_data, own_company=own_company)

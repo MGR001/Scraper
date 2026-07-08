@@ -468,3 +468,81 @@ async def generate_positioning_teardown(competitors: list[dict], own_company: di
     except Exception:
         logger.error("Positioning teardown JSON parse failed: %s", raw[:200])
         return {}
+
+
+async def generate_campaign_messaging(competitors: list[dict], own_company: dict | None = None) -> dict:
+    """
+    Using competitive intelligence, generate campaign messaging suggestions across
+    five channels: Paid Social, Email Nurture, Content/SEO, Sales Outreach, PR.
+    If own_company is provided, messages emphasise the user's differentiators.
+    """
+    import json as _json
+
+    all_entries = ([own_company] if own_company else []) + competitors
+    parts = [
+        f"## {'YOUR COMPANY: ' if own_company and c is own_company else ''}{c['name']} ({c['url']})\n{c['content_summary']}"
+        for c in all_entries
+    ]
+    context = "\n\n---\n\n".join(parts)
+
+    own_note = (
+        f"The first entry ('YOUR COMPANY: {own_company['name']}') is the user's own company. "
+        "Write all messaging from that company's perspective, exploiting gaps competitors leave open "
+        f"and differentiating clearly from them. Refer to the company as '{own_company['name']}'.\n"
+        if own_company else
+        "Write messaging from the perspective of a challenger brand entering this market.\n"
+    )
+
+    system_prompt = (
+        "You are a senior B2B campaign strategist. Using the competitive intelligence below, "
+        "generate campaign messaging suggestions across five channels.\n"
+        + own_note +
+        "For each channel produce exactly 3 message variants, each targeting a distinct ICP or angle.\n"
+        "Rules:\n"
+        "  - Headlines must be punchy and specific (max 10 words)\n"
+        "  - Body copy is 2-3 sentences — no buzzwords, no 'leverage', no 'synergy'\n"
+        "  - Each angle must exploit a real gap or weakness visible in the competitor content\n"
+        "  - CTA should be action-oriented (max 6 words)\n"
+        "Return ONLY valid JSON with no markdown fences. Schema:\n"
+        "{\n"
+        "  \"strategic_summary\": \"<2-3 sentences on the overall messaging opportunity>\",\n"
+        "  \"channels\": [\n"
+        "    {\n"
+        "      \"id\": \"<slug, e.g. paid-social>\",\n"
+        "      \"name\": \"<channel name>\",\n"
+        "      \"messages\": [\n"
+        "        {\n"
+        "          \"icp\": \"<target buyer persona in 5-8 words>\",\n"
+        "          \"angle\": \"<competitive angle or gap being exploited, 5-10 words>\",\n"
+        "          \"headline\": \"<attention-grabbing headline>\",\n"
+        "          \"body\": \"<message body copy, 2-3 sentences>\",\n"
+        "          \"cta\": \"<call to action>\"\n"
+        "        }\n"
+        "      ]\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Channels (use these ids and names exactly): "
+        "paid-social / Paid Social, "
+        "email-nurture / Email Nurture, "
+        "content-seo / Content & SEO, "
+        "sales-outreach / Sales Outreach, "
+        "pr-thought-leadership / PR & Thought Leadership."
+    )
+
+    response = await _get_client().chat.completions.create(
+        model=settings.chat_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Competitive intelligence:\n\n{context}"},
+        ],
+        temperature=0.35,
+        max_tokens=3000,
+        response_format={"type": "json_object"},
+    )
+    raw = response.choices[0].message.content or "{}"
+    try:
+        return _json.loads(raw)
+    except Exception:
+        logger.error("Campaign messaging JSON parse failed: %s", raw[:200])
+        return {}

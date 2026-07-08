@@ -109,6 +109,9 @@
     .gtm-sub-tab { padding:.5rem 1.25rem; font-size:.875rem; font-weight:500; color:#64748b; border-bottom:2px solid transparent; background:transparent; cursor:pointer; transition:color .15s,border-color .15s; margin-bottom:-1px; }
     .gtm-sub-tab:hover { color:#e2e8f0; }
     .gtm-sub-tab.active { color:#fff; border-bottom-color:#3b82f6; }
+    .cm-channel-pill { background:rgba(30,41,59,0.6); color:#64748b; border-color:rgba(51,65,85,0.8); }
+    .cm-channel-pill:hover { color:#e2e8f0; border-color:#475569; }
+    .cm-channel-pill.active { background:rgba(59,130,246,0.18); color:#93c5fd; border-color:rgba(59,130,246,0.4); }
     .td-label { font-family:'IBM Plex Mono',monospace; font-size:.625rem; letter-spacing:.1em; text-transform:uppercase; color:#8A93A3; }
     .td-claim { font-family:'IBM Plex Serif',serif; font-style:italic; font-size:.9375rem; color:#e8e4d9; line-height:1.55; }
     .td-value { font-size:.8125rem; color:#94a3b8; line-height:1.5; }
@@ -599,6 +602,7 @@
       <nav class="flex -mb-px" role="tablist" aria-label="GTM views">
         <button class="gtm-sub-tab active" data-gtm-tab="heatmap" onclick="showGtmTab('heatmap')" role="tab" aria-selected="true">Segment Heatmap</button>
         <button class="gtm-sub-tab" data-gtm-tab="positioning" onclick="showGtmTab('positioning')" role="tab" aria-selected="false">Positioning Teardown</button>
+        <button class="gtm-sub-tab" data-gtm-tab="messaging" onclick="showGtmTab('messaging')" role="tab" aria-selected="false">Campaign Messaging</button>
       </nav>
     </div>
     <!-- ── Heatmap sub-panel ──── -->
@@ -692,7 +696,29 @@
         <p class="text-slate-500 text-sm font-medium">No teardown generated yet</p>
         <p class="text-slate-600 text-xs mt-1">Click “Generate Teardown” to reconstruct each competitor’s positioning</p>
       </div>
-    </div>
+    </div><!-- /gtm-sub-positioning -->
+
+    <!-- ── Campaign Messaging sub-panel ────────────── -->
+    <div id="gtm-sub-messaging" class="p-6 max-w-7xl mx-auto hidden" role="tabpanel">
+      <div class="flex justify-end mb-6">
+        <button onclick="loadCampaignMessaging()" id="cm-refresh-btn"
+          class="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-2 rounded-lg transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-      181 3.182m0-4.9            <path stroke-linecap="round" stroke-linejoin="round" d="M16on>
+      </div>
+      <div id="cm-loading" class="hidden text-center py-20">
+        <span class="spinner"></span>
+        <p class="text-slate-400 text-sm mt-4 animate-pulse">Crafting campaign messaging from competitive intelligence&#8230;</        <p class="text-slate-400 text-sm mt-4 animate-pulse">Crafting campa bg-red-900/20 border border-red-800 rounded-xl p-4 mb-6"></div>
+      <div id="cm-content" class="hidden">
+        <div id="cm-summary" class="mb-6 p-4 rounded-xl border" style="background:rgba(59,130,246,0.07);border-color:rgba(59,130,246,0.25)"></div>
+        <div id="cm-channel-nav" class="flex flex-wrap gap-2 mb-5"></div>
+        <div id="cm-cards" class="grid grid-cols-1 sm:grid-cols-3 gap-4"></div>
+      </div>
+      <div id="cm-empty" class="text-center py-20 border border-dashed border-border rounded-xl">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-slate-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round          <path stroke-linecap="round          <path str.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.7          <path stroke-linecap="roundp clas          <path stroke-linecap="round          <path stroke-linecap="round          <path str.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.29ng&#34; to build campaign copy from your competitive intelligence</p>
+      </div>
+    </div><!-- /gtm-sub-messaging -->
   </div><!-- /page-gtm -->
 
   </main>
@@ -2006,7 +2032,7 @@
   let _teardownData = null;
 
   function showGtmTab(tab) {
-    ['heatmap','positioning'].forEach(t => {
+    ['heatmap','positioning','messaging'].forEach(t => {
       document.getElementById('gtm-sub-' + t).classList.toggle('hidden', t !== tab);
       const btn = document.querySelector('[data-gtm-tab="' + t + '"]');
       btn.classList.toggle('active', t === tab);
@@ -2085,6 +2111,90 @@
         + ownBadge
       + '</header>'
       + '<div role="table" aria-label="' + esc(c.name) + ' positioning fields">' + rows + '</div>'
+      + '</article>';
+  }
+
+  // ── Campaign Messaging ────────────────────────────────
+  let _messagingData  = null;
+  let _activeChannel  = null;
+
+  async function loadCampaignMessaging() {
+    const btn     = document.getElementById('cm-refresh-btn');
+    const loading = document.getElementById('cm-loading');
+    const errEl   = document.getElementById('cm-error');
+    const content = document.getElementById('cm-content');
+    const empty   = document.getElementById('cm-empty');
+    btn.disabled = true;
+    loading.classList.remove('hidden');
+    [errEl, content, empty].forEach(el => el.classList.add('hidden'));
+    try {
+      const data = await api('/api/insights/campaign-messaging');
+      _messagingData = data;
+      renderCampaignMessaging(data);
+    } catch (e) {
+      errEl.textContent = 'Error: ' + e.message;
+      errEl.classList.remove('hidden');
+      empty.classList.remove('hidden');
+    } finally {
+      loading.classList.add('hidden');
+      btn.disabled = false;
+    }
+  }
+
+  function renderCampaignMessaging(data) {
+    const content  = document.getElementById('cm-content');
+    const empty    = document.getElementById('cm-empty');
+    const channels = data.channels || [];
+    if (!channels.length) { empty.classList.remove('hidden'); return; }
+
+    // Strategic summary
+    const summaryEl = document.getElementById('cm-summary');
+    summaryEl.innerHTML = data.strategic_summary
+      ? '<p class="text-sm text-blue-200 leading-relaxed">'
+        + '<span class="font-semibold text-blue-300 mr-1.5">Strategic opportunity:</span>'
+        + esc(data.strategic_summary) + '</p>'
+      : '';
+
+    // Channel pills
+    const navEl = document.getElementById('cm-channel-nav');
+    navEl.innerHTML = channels.map((ch, i) =>
+      '<button class="cm-channel-pill px-3 py-1.5 text-xs font-medium rounded-full border transition'
+      + (i === 0 ? ' active' : '') + '" data-ch-idx="' + i + '" onclick="switchCmChannel(' + i + ')">'
+      + esc(ch.name) + '</button>'
+    ).join('');
+
+    _activeChannel = 0;
+    renderCmCards(channels[0]);
+    content.classList.remove('hidden');
+    empty.classList.add('hidden');
+  }
+
+  function switchCmChannel(idx) {
+    document.querySelectorAll('.cm-channel-pill').forEach((b, i) =>
+      b.classList.toggle('active', i === idx)
+    );
+    _activeChannel = idx;
+    renderCmCards((_messagingData.channels || [])[idx]);
+  }
+
+  function renderCmCards(channel) {
+    const cardsEl = document.getElementById('cm-cards');
+    if (!channel) { cardsEl.innerHTML = ''; return; }
+    cardsEl.innerHTML = (channel.messages || []).map(m => buildCmCard(m)).join('');
+  }
+
+  function buildCmCard(m) {
+    return '<article class="rounded-xl p-5 flex flex-col gap-3" style="background:rgba(30,41,59,0.55);border:1px solid rgba(51,65,85,0.8);">'
+      + '<div class="flex flex-wrap gap-1.5">'
+        + '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full" style="background:rgba(99,102,241,0.18);color:#a5b4fc">'
+          + esc(m.icp || '') + '</span>'
+        + (m.angle ? '<span class="text-[10px] font-medium px-2 py-0.5 rounded-full" style="background:rgba(16,185,129,0.12);color:#6ee7b7">'
+          + esc(m.angle) + '</span>' : '')
+      + '</div>'
+      + '<h3 class="font-bold text-white leading-snug" style="font-size:.9375rem">' + esc(m.headline || '') + '</h3>'
+      + '<p class="text-sm text-slate-400 leading-relaxed flex-1">' + esc(m.body || '') + '</p>'
+      + (m.cta ? '<div class="pt-1"><span class="inline-block text-xs font-semibold px-3 py-1.5 rounded-lg" style="background:rgba(59,130,246,0.18);color:#93c5fd">'
+        + esc(m.cta) + '</span></div>' : '')
       + '</article>';
   }
 
