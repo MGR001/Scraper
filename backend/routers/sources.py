@@ -16,24 +16,35 @@ async def list_sources():
     sources = await asyncio.to_thread(
         lambda: db.table("sources").select("*").order("created_at", desc=True).execute()
     )
-    content = await asyncio.to_thread(
-        lambda: db.table("scraped_content").select("source_id, url").execute()
-    )
 
-    # Build per-source stats from the content rows
+    # Paginate through all scraped_content rows to count chunks + unique pages
+    # (Supabase default cap is 1000 rows — we must paginate for accuracy)
     from collections import defaultdict
-    pages_map: dict[str, set] = defaultdict(set)
+    url_sets: dict[str, set] = defaultdict(set)
     chunks_map: dict[str, int] = defaultdict(int)
-    for row in content.data:
-        sid = row["source_id"]
-        pages_map[sid].add(row["url"])
-        chunks_map[sid] += 1
+    batch = 1000
+    offset = 0
+    while True:
+        rows = await asyncio.to_thread(
+            lambda o=offset: db.table("scraped_content")
+            .select("source_id, url")
+            .range(o, o + batch - 1)
+            .execute()
+        )
+        data = rows.data or []
+        for row in data:
+            sid = row["source_id"]
+            url_sets[sid].add(row["url"])
+            chunks_map[sid] += 1
+        if len(data) < batch:
+            break
+        offset += batch
 
     enriched = []
     for s in sources.data:
         sid = s["id"]
-        s["pages_scraped"] = len(pages_map[sid])
-        s["chunks_stored"] = chunks_map[sid]
+        s["pages_scraped"] = len(url_sets.get(sid, set()))
+        s["chunks_stored"] = chunks_map.get(sid, 0)
         enriched.append(s)
 
     return enriched
