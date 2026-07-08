@@ -29,3 +29,8 @@ app.include_router(insights.router, prefix="/api/insights", tags=["insights"])
 @app.get("/", include_in_schema=False)
 async def index():
     return FileResponse(os.path.join(_FRONTEND, "index.html"))
+
+
+@app.get("/app.js", include_in_schema=False)
+async def app_js():
+    return FileResponse(os.path.join(_FRONTEND, "app.js"), media_type="application/javascript")
