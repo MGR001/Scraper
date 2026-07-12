@@ -17,12 +17,16 @@ async def list_sources():
         lambda: db.table("sources").select("*").order("created_at", desc=True).execute()
     )
 
-    stats_result = await asyncio.to_thread(
-        lambda: db.rpc("source_stats").execute()
-    )
-    stats_map: dict[str, dict] = {
-        row["source_id"]: row for row in (stats_result.data or [])
-    }
+    try:
+        stats_result = await asyncio.to_thread(
+            lambda: db.rpc("source_stats").execute()
+        )
+        stats_map: dict[str, dict] = {
+            row["source_id"]: row for row in (stats_result.data or [])
+        }
+    except Exception:
+        # source_stats() function not yet deployed — degrade gracefully
+        stats_map = {}
 
     enriched = []
     for s in sources.data:
