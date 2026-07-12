@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     await close_http_client()
 
 
-app = FastAPI(title="StrategyHub", lifespan=lifespan)
+app = FastAPI(title="RIvals", lifespan=lifespan)
 
 _auth = [Depends(require_api_key)]
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StrategyHub</title>
+  <title>RIvals</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;1,400;1,500&display=swap" rel="stylesheet">
@@ -13,16 +13,16 @@
       theme: {
         extend: {
           colors: {
-            surface: '#0f172a',
-            card:    '#1e293b',
-            border:  '#334155',
+            surface: '#f8fafc',
+            card:    '#ffffff',
+            border:  '#e2e8f0',
           }
         }
       }
     }
   </script>
   <style>
-    body { background-color: #0f172a; }
+    body { background-color: #f8fafc; color: #1e293b; }
     .tab-btn {
       display: flex;
       align-items: center;
@@ -33,10 +33,10 @@
       border-radius: .5rem;
       font-size: .875rem;
       font-weight: 500;
-      color: #94a3b8;
+      color: #64748b;
       transition: background .15s, color .15s;
     }
-    .tab-btn:hover  { background: #1e293b; color: #e2e8f0; }
+    .tab-btn:hover  { background: #f1f5f9; color: #1e293b; }
     .tab-btn.active { background: #3b82f6; color: #fff; }
     .page { display: none; }
     .page.active { display: block; }
@@ -47,28 +47,28 @@
       font-size: .75rem;
       font-weight: 600;
     }
-    .badge-competitor { background:#7c3aed22; color:#a78bfa; }
-    .badge-news       { background:#0891b222; color:#38bdf8; }
-    .badge-market     { background:#05966922; color:#34d399; }
-    .badge-general    { background:#64748b22; color:#94a3b8; }
-    .badge-own        { background:#d9770622; color:#fb923c; }
+    .badge-competitor { background:#7c3aed15; color:#6d28d9; }
+    .badge-news       { background:#0891b215; color:#0369a1; }
+    .badge-market     { background:#05966915; color:#047857; }
+    .badge-general    { background:#64748b15; color:#475569; }
+    .badge-own        { background:#ea580c15; color:#c2410c; }
     /* Modal */
     #chunk-modal, #urls-modal, #add-url-modal, #export-modal { display:none; }
     #chunk-modal.open, #urls-modal.open, #add-url-modal.open, #export-modal.open { display:flex; }
     .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
-    .status-idle     { background:#475569; }
+    .status-idle     { background:#cbd5e1; }
     .status-running  { background:#3b82f6; animation: pulse 1s ease-in-out infinite; }
     .status-completed{ background:#10b981; }
     .status-error    { background:#ef4444; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
     #chunk-modal-body::-webkit-scrollbar { width:6px; }
-    #chunk-modal-body::-webkit-scrollbar-thumb { background:#334155; border-radius:3px; }
+    #chunk-modal-body::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
     .chunk-item { cursor:pointer; transition:border-color .15s, background .15s; }
-    .chunk-item:hover { border-color:#3b82f6 !important; background:#1e3a5f22; }
+    .chunk-item:hover { border-color:#3b82f6 !important; background:#eff6ff; }
 
     .spinner {
       width:18px; height:18px;
-      border:2px solid #334155;
+      border:2px solid #e2e8f0;
       border-top-color:#3b82f6;
       border-radius:50%;
       animation: spin .7s linear infinite;
@@ -80,13 +80,13 @@
       border-radius: 9999px;
       font-size: .75rem;
       font-weight: 600;
-      color: #94a3b8;
-      border: 1px solid #334155;
+      color: #475569;
+      border: 1px solid #e2e8f0;
       background: transparent;
       cursor: pointer;
       transition: all .15s;
     }
-    .news-cat-btn:hover  { background: #1e293b; color: #e2e8f0; border-color: #475569; }
+    .news-cat-btn:hover  { background: #f1f5f9; color: #1e293b; border-color: #cbd5e1; }
     .news-cat-btn.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
     .line-clamp-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
     .line-clamp-3 { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
@@ -94,27 +94,27 @@
       padding: .5rem 1.25rem;
       font-size: .875rem;
       font-weight: 500;
-      color: #64748b;
+      color: #94a3b8;
       border-bottom: 2px solid transparent;
       background: transparent;
       cursor: pointer;
       transition: color .15s, border-color .15s;
       margin-bottom: -1px;
     }
-    .src-tab-btn:hover  { color: #e2e8f0; }
-    .src-tab-btn.active { color: #fff; border-bottom-color: #3b82f6; }
-    .gtm-lens-btn { background: transparent; color: #94a3b8; cursor: pointer; }
-    .gtm-lens-btn:hover { background: #1e293b; color: #e2e8f0; }
+    .src-tab-btn:hover  { color: #1e293b; }
+    .src-tab-btn.active { color: #1e293b; border-bottom-color: #3b82f6; }
+    .gtm-lens-btn { background: transparent; color: #64748b; cursor: pointer; }
+    .gtm-lens-btn:hover { background: #f1f5f9; color: #1e293b; }
     .gtm-lens-btn.active { background: #3b82f6; color: #fff; }
-    .gtm-sub-tab { padding:.5rem 1.25rem; font-size:.875rem; font-weight:500; color:#64748b; border-bottom:2px solid transparent; background:transparent; cursor:pointer; transition:color .15s,border-color .15s; margin-bottom:-1px; }
-    .gtm-sub-tab:hover { color:#e2e8f0; }
-    .gtm-sub-tab.active { color:#fff; border-bottom-color:#3b82f6; }
-    .cm-channel-pill { background:rgba(30,41,59,0.6); color:#64748b; border-color:rgba(51,65,85,0.8); }
-    .cm-channel-pill:hover { color:#e2e8f0; border-color:#475569; }
-    .cm-channel-pill.active { background:rgba(59,130,246,0.18); color:#93c5fd; border-color:rgba(59,130,246,0.4); }
-    .td-label { font-family:'IBM Plex Mono',monospace; font-size:.625rem; letter-spacing:.1em; text-transform:uppercase; color:#8A93A3; }
-    .td-claim { font-family:'IBM Plex Serif',serif; font-style:italic; font-size:.9375rem; color:#e8e4d9; line-height:1.55; }
-    .td-value { font-size:.8125rem; color:#94a3b8; line-height:1.5; }
+    .gtm-sub-tab { padding:.5rem 1.25rem; font-size:.875rem; font-weight:500; color:#94a3b8; border-bottom:2px solid transparent; background:transparent; cursor:pointer; transition:color .15s,border-color .15s; margin-bottom:-1px; }
+    .gtm-sub-tab:hover { color:#1e293b; }
+    .gtm-sub-tab.active { color:#1e293b; border-bottom-color:#3b82f6; }
+    .cm-channel-pill { background:rgba(241,245,249,0.8); color:#64748b; border-color:rgba(226,232,240,0.9); }
+    .cm-channel-pill:hover { color:#1e293b; border-color:#cbd5e1; }
+    .cm-channel-pill.active { background:rgba(59,130,246,0.1); color:#1d4ed8; border-color:rgba(59,130,246,0.4); }
+    .td-label { font-family:'IBM Plex Mono',monospace; font-size:.625rem; letter-spacing:.1em; text-transform:uppercase; color:#94a3b8; }
+    .td-claim { font-family:'IBM Plex Serif',serif; font-style:italic; font-size:.9375rem; color:#1e293b; line-height:1.55; }
+    .td-value { font-size:.8125rem; color:#64748b; line-height:1.5; }
 
     @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
     /* Positioning Teardown */
@@ -125,31 +125,31 @@
       gap: .5rem;
       align-items: start;
       padding: .7rem 1.25rem;
-      border-top: 1px solid rgba(51,65,85,0.5);
+      border-top: 1px solid rgba(226,232,240,0.8);
     }
     .pos-label {
       font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: .625rem;
       font-weight: 600;
       letter-spacing: .09em;
-      color: #8A93A3;
+      color: #94a3b8;
       text-transform: uppercase;
       padding-top: 2px;
       line-height: 1.6;
     }
-    .pos-value { font-size: .8125rem; color: #cbd5e1; line-height: 1.5; }
+    .pos-value { font-size: .8125rem; color: #475569; line-height: 1.5; }
     .pos-claim-value {
       font-family: 'IBM Plex Serif', Georgia, serif;
       font-style: italic;
       font-size: .9375rem;
-      color: #E8E4D9;
+      color: #1e293b;
       line-height: 1.45;
     }
     .pos-card:focus-within { outline: 2px solid #3b82f6; outline-offset: 2px; }
     @media (prefers-reduced-motion: reduce) { .pos-card, .gtm-cell { transition: none !important; } }
   </style>
 </head>
-<body class="text-slate-200 min-h-screen">
+<body class="text-slate-800 min-h-screen">
 
   <!-- ── App Layout ─────────────────────────────────── -->
   <div class="flex min-h-screen">
@@ -160,7 +160,7 @@
       <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zm6.75-9.75C9.75 2.754 10.254 2.25 10.875 2.25h2.25c.621 0 1.125.504 1.125 1.125v16.5c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 019.75 19.875V3.375zm6.75 4.5c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v12c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125v-12z"/>
       </svg>
-      <span class="text-sm font-bold text-white tracking-tight">StrategyHub</span>
+      <span class="text-sm font-bold text-slate-900 tracking-tight">RIvals</span>
     </div>
     <nav class="flex flex-col gap-0.5 p-3 pt-4 flex-1">
       <button class="tab-btn" data-page="own" onclick="showPage('own')">
@@ -201,10 +201,10 @@
     <div class="bg-card border border-border rounded-2xl w-full max-w-xl max-h-[75vh] flex flex-col shadow-2xl">
       <div class="flex items-center justify-between gap-4 p-5 border-b border-border">
         <div>
-          <p id="urls-modal-title" class="font-semibold text-white text-base"></p>
+          <p id="urls-modal-title" class="font-semibold text-slate-900 text-base"></p>
           <p id="urls-modal-count" class="text-xs text-slate-400 mt-0.5"></p>
         </div>
-        <button onclick="closeUrlsModal()" class="shrink-0 text-slate-400 hover:text-white transition">
+        <button onclick="closeUrlsModal()" class="shrink-0 text-slate-400 hover:text-slate-900 transition">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
           </svg>
@@ -218,7 +218,7 @@
     <div class="bg-card border border-border rounded-2xl w-full max-w-2xl flex flex-col shadow-2xl" style="max-height:85vh">
       <div class="flex items-center justify-between gap-4 p-5 border-b border-border">
         <div>
-          <p class="font-semibold text-white text-base">Competitor Change Report</p>
+          <p class="font-semibold text-slate-900 text-base">Competitor Change Report</p>
           <p class="text-xs text-slate-400 mt-0.5">Select all and copy, or use the button below</p>
         </div>
         <div class="flex items-center gap-2">
@@ -229,7 +229,7 @@
             </svg>
             Copy to Clipboard
           </button>
-          <button onclick="closeExportModal()" class="shrink-0 text-slate-400 hover:text-white transition">
+          <button onclick="closeExportModal()" class="shrink-0 text-slate-400 hover:text-slate-900 transition">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
             </svg>
@@ -237,7 +237,7 @@
         </div>
       </div>
       <textarea id="export-text" readonly onclick="this.select()"
-        class="flex-1 p-5 text-sm text-slate-300 bg-surface font-mono leading-relaxed resize-none focus:outline-none overflow-y-auto"
+        class="flex-1 p-5 text-sm text-slate-700 bg-surface font-mono leading-relaxed resize-none focus:outline-none overflow-y-auto"
         style="min-height:320px;"></textarea>
     </div>
   </div>
@@ -247,10 +247,10 @@
     <div class="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl">
       <div class="flex items-center justify-between gap-4 p-5 border-b border-border">
         <div>
-          <p class="font-semibold text-white text-base">Add Specific URL</p>
+          <p class="font-semibold text-slate-900 text-base">Add Specific URL</p>
           <p id="add-url-source-label" class="text-xs text-slate-400 mt-0.5"></p>
         </div>
-        <button onclick="closeAddUrlModal()" class="shrink-0 text-slate-400 hover:text-white transition">
+        <button onclick="closeAddUrlModal()" class="shrink-0 text-slate-400 hover:text-slate-900 transition">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
           </svg>
@@ -259,7 +259,7 @@
       <div class="p-5">
         <p class="text-xs text-slate-500 mb-3">Paste any URL from this source to fetch and embed its content directly.</p>
         <input id="add-url-input" type="url" placeholder="https://example.com/specific-page"
-          class="w-full bg-surface border border-border rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"/>
+          class="w-full bg-surface border border-border rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"/>
         <div id="add-url-status" class="text-sm mb-3 hidden"></div>
         <div class="flex gap-3 justify-end">
           <button onclick="closeAddUrlModal()"
@@ -280,16 +280,16 @@
     <div class="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
       <div class="flex items-start justify-between gap-4 p-5 border-b border-border">
         <div class="min-w-0">
-          <p id="chunk-modal-title" class="font-semibold text-white text-base"></p>
+          <p id="chunk-modal-title" class="font-semibold text-slate-900 text-base"></p>
           <p id="chunk-modal-meta" class="text-xs text-slate-400 mt-1 truncate"></p>
         </div>
-        <button onclick="closeModal()" class="shrink-0 text-slate-400 hover:text-white transition">
+        <button onclick="closeModal()" class="shrink-0 text-slate-400 hover:text-slate-900 transition">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
           </svg>
         </button>
       </div>
-      <pre id="chunk-modal-body" class="flex-1 overflow-y-auto p-5 text-sm text-slate-300 whitespace-pre-wrap font-sans leading-relaxed"></pre>
+      <pre id="chunk-modal-body" class="flex-1 overflow-y-auto p-5 text-sm text-slate-700 whitespace-pre-wrap font-sans leading-relaxed"></pre>
     </div>
   </div>
 
@@ -317,7 +317,7 @@
           <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Sources</p>
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253"/></svg>
         </div>
-        <p class="text-3xl font-bold text-white" id="stat-total-sources">—</p>
+        <p class="text-3xl font-bold text-slate-900" id="stat-total-sources">—</p>
         <p class="text-xs text-slate-500 mt-1" id="stat-active-sub">—</p>
       </div>
       <div class="bg-card border border-border rounded-xl p-4">
@@ -325,7 +325,7 @@
           <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Competitors</p>
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941"/></svg>
         </div>
-        <p class="text-3xl font-bold text-violet-300" id="stat-competitors">—</p>
+        <p class="text-3xl font-bold text-violet-600" id="stat-competitors">—</p>
         <p class="text-xs text-slate-500 mt-1" id="stat-competitors-sub">—</p>
       </div>
       <div class="bg-card border border-border rounded-xl p-4">
@@ -333,7 +333,7 @@
           <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Content Indexed</p>
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75M3.75 13.875v3.75"/></svg>
         </div>
-        <p class="text-3xl font-bold text-emerald-400" id="stat-chunks">—</p>
+        <p class="text-3xl font-bold text-emerald-600" id="stat-chunks">—</p>
         <p class="text-xs text-slate-500 mt-1">total chunks</p>
       </div>
       <div class="bg-card border border-border rounded-xl p-4">
@@ -341,7 +341,7 @@
           <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Last Update</p>
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         </div>
-        <p class="text-base font-semibold text-blue-300" id="stat-last-scrape">—</p>
+        <p class="text-base font-semibold text-blue-600" id="stat-last-scrape">—</p>
         <p class="text-xs mt-1" id="stat-freshness">—</p>
       </div>
     </div>
@@ -349,13 +349,13 @@
     <!-- Two-column: Coverage + Source Health -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div class="bg-card border border-border rounded-xl p-5">
-        <h2 class="text-sm font-semibold text-white mb-4">Coverage by Category</h2>
+        <h2 class="text-sm font-semibold text-slate-900 mb-4">Coverage by Category</h2>
         <div id="coverage-list" class="space-y-3.5">
           <p class="text-slate-500 text-sm">Loading…</p>
         </div>
       </div>
       <div class="bg-card border border-border rounded-xl p-5">
-        <h2 class="text-sm font-semibold text-white mb-3">Source Health</h2>
+        <h2 class="text-sm font-semibold text-slate-900 mb-3">Source Health</h2>
         <div id="source-health-list">
           <p class="text-slate-500 text-sm">Loading…</p>
         </div>
@@ -379,11 +379,11 @@
     <div id="comparison-panel" class="bg-card border border-border rounded-2xl overflow-hidden mb-6">
       <div class="flex items-center justify-between gap-4 px-5 py-4 border-b border-border">
         <div>
-          <h2 class="font-semibold text-white text-sm tracking-wide">Competitive Landscape Matrix</h2>
+          <h2 class="font-semibold text-slate-900 text-sm tracking-wide">Competitive Landscape Matrix</h2>
           <p class="text-xs text-slate-400 mt-0.5">McKinsey-style executive cross-competitor analysis</p>
         </div>
         <button onclick="generateComparison()" id="btn-comparison"
-          class="flex items-center gap-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs font-medium px-3 py-1.5 rounded-lg transition border border-indigo-500/30">
+          class="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium px-3 py-1.5 rounded-lg transition border border-indigo-200">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6"/>
           </svg>
@@ -434,9 +434,9 @@
 
     <!-- Actions -->
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-sm font-semibold text-slate-300">Indexed Sources</h2>
+        <h2 class="text-sm font-semibold text-slate-700">Indexed Sources</h2>
       <button onclick="scrapeAllOwn()"
-        class="flex items-center gap-1.5 text-xs bg-orange-600/20 hover:bg-orange-600/40 text-orange-300 border border-orange-500/30 px-3 py-1.5 rounded-lg transition">
+        class="flex items-center gap-1.5 text-xs bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 px-3 py-1.5 rounded-lg transition">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
         Scrape All
       </button>
@@ -521,7 +521,7 @@
         <p class="text-sm text-slate-400 mt-0.5">Latest content from monitored news sources</p>
       </div>
       <button onclick="loadNews(true)"
-        class="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm transition">
+        class="flex items-center gap-1.5 text-slate-500 hover:text-slate-900 text-sm transition">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
         </svg>
@@ -531,9 +531,9 @@
 
     <!-- Search -->
     <div class="flex items-center gap-3 mb-5">
-      <input id="news-search" type="text" placeholder="Filter by keyword…"
+        <input id="news-search" type="text" placeholder="Filter by keyword…"
         oninput="filterNews()"
-        class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"/>
+        class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"/>
     </div>
 
     <!-- 5-Day Intelligence Digest -->
@@ -543,7 +543,7 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
           </svg>
-          <h2 class="font-semibold text-white text-sm">5-Day Intelligence Digest</h2>
+          <h2 class="font-semibold text-slate-900 text-sm">5-Day Intelligence Digest</h2>
           <span id="digest-date" class="text-xs text-slate-500"></span>
         </div>
         <button onclick="loadNewsDigest()" id="digest-gen-btn"
@@ -576,7 +576,7 @@
         <p class="text-sm text-slate-400 mt-0.5">Competitor change analysis grounded in your scraped data.</p>
       </div>
       <button onclick="loadCompetitorChanges()" id="changes-btn"
-        class="flex items-center gap-1.5 text-xs bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 px-3 py-2 rounded-lg transition shrink-0">
+        class="flex items-center gap-1.5 text-xs bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 px-3 py-2 rounded-lg transition shrink-0 border border-slate-200">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
         </svg>
@@ -624,9 +624,9 @@
 
     <div id="gtm-loading" class="hidden text-center py-20">
       <span class="spinner"></span>
-      <p class="text-slate-400 text-sm mt-4 animate-pulse">Analysing competitor data and mapping segments…</p>
+          <p class="text-slate-500 text-sm mt-4 animate-pulse">Analysing competitor data and mapping segments…</p>
     </div>
-    <div id="gtm-error" class="hidden text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-xl p-4 mb-4"></div>
+    <div id="gtm-error" class="hidden text-red-700 text-sm bg-red-50 border border-red-200 rounded-xl p-4 mb-4"></div>
 
     <div id="gtm-table-wrap" class="hidden overflow-x-auto rounded-xl border border-border mb-3">
       <table id="gtm-table" class="w-full text-sm border-collapse" role="grid" aria-label="ICP segment by competitor heatmap">
@@ -659,8 +659,8 @@
     </div>
 
     <div id="gtm-cards" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-      <div id="gtm-defend-card" class="bg-card border border-red-900/40 rounded-xl p-5"></div>
-      <div id="gtm-attack-card" class="bg-card border border-emerald-900/40 rounded-xl p-5"></div>
+      <div id="gtm-defend-card" class="bg-card border border-red-200 rounded-xl p-5"></div>
+      <div id="gtm-attack-card" class="bg-card border border-emerald-200 rounded-xl p-5"></div>
     </div>
 
     <div id="gtm-empty" class="text-center py-20 border border-dashed border-border rounded-xl">
@@ -685,9 +685,9 @@
       </div>
       <div id="td-loading" class="hidden text-center py-20">
         <span class="spinner"></span>
-        <p class="text-slate-400 text-sm mt-4 animate-pulse">Reconstructing competitor positioning from scraped content…</p>
+        <p class="text-slate-500 text-sm mt-4 animate-pulse">Reconstructing competitor positioning from scraped content…</p>
       </div>
-      <div id="td-error" class="hidden text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-xl p-4 mb-6"></div>
+      <div id="td-error" class="hidden text-red-700 text-sm bg-red-50 border border-red-200 rounded-xl p-4 mb-6"></div>
       <div id="td-grid" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-5"></div>
       <div id="td-empty" class="text-center py-20 border border-dashed border-border rounded-xl">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-slate-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -711,9 +711,9 @@
       </div>
       <div id="cm-loading" class="hidden text-center py-20">
         <span class="spinner"></span>
-        <p class="text-slate-400 text-sm mt-4 animate-pulse">Crafting campaign messaging from competitive intelligence&#8230;</p>
+        <p class="text-slate-500 text-sm mt-4 animate-pulse">Crafting campaign messaging from competitive intelligence&#8230;</p>
       </div>
-      <div id="cm-error" class="hidden bg-red-900/20 border border-red-800 rounded-xl p-4 mb-6"></div>
+      <div id="cm-error" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 mb-6"></div>
       <div id="cm-content" class="hidden">
         <div id="cm-summary" class="mb-6 p-4 rounded-xl border" style="background:rgba(59,130,246,0.07);border-color:rgba(59,130,246,0.25)"></div>
         <div id="cm-channel-nav" class="flex flex-wrap gap-2 mb-5"></div>
@@ -723,7 +723,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-slate-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/>
         </svg>
-        <p class="text-slate-500 text-sm mt-2">Click <strong class="text-slate-300">Generate Messaging</strong> to build campaign copy from your competitive intelligence.</p>
+        <p class="text-slate-500 text-sm mt-2">Click <strong class="text-slate-700">Generate Messaging</strong> to build campaign copy from your competitive intelligence.</p>
       </div>
     </div><!-- /gtm-sub-messaging -->
   </div><!-- /page-gtm -->
