@@ -3,13 +3,14 @@
   function showPage(name) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('page-' + name).classList.add('active');
-    document.querySelector(`[data-page="${name}"]`).classList.add('active');
+    document.getElementById('page-' + name)?.classList.add('active');
+    document.querySelector(`[data-page="${name}"]`)?.classList.add('active');
     if (name === 'dashboard')   loadDashboard();
     if (name === 'own')         loadOwnSources();
     if (name === 'sources')     loadSources();
     if (name === 'competitors') { loadCompetitors(); startStatusPolling(); }
     if (name === 'news')        loadNews();
+    if (name === 'settings')    loadSettings();
   }
 
   // ── Supabase auth ─────────────────────────────────────────
@@ -1580,8 +1581,393 @@
   }
 
   // ── Boot ─────────────────────────────────────────────
-  // Stub for onboarding — filled in when onboarding module is added (Task 7)
-  function startOnboarding() { showPage('dashboard'); }
+  // ── Onboarding (Task 7) ───────────────────────────────
+  const OB_STEPS = [
+    { title: 'Create your workspace',    sub: 'Give your team a home.' },
+    { title: 'Your company',             sub: 'Index your own web presence as a baseline.' },
+    { title: 'Add your first rival',     sub: 'Add up to three competitors to watch.' },
+    { title: 'Invite your team',         sub: 'Optional — you can do this later in Settings.' },
+    { title: 'Start your first sweep',   sub: 'Kick off the initial crawl and watch it run.' },
+  ];
+  let _obStep = 0;
+  let _obState = {}; // persisted to sessionStorage
+
+  function _obLoad() {
+    try { _obState = JSON.parse(sessionStorage.getItem('ob_state') || '{}'); } catch { _obState = {}; }
+    _obStep = parseInt(_obState.step || '0', 10);
+  }
+  function _obSave(patch = {}) {
+    Object.assign(_obState, patch, { step: _obStep });
+    sessionStorage.setItem('ob_state', JSON.stringify(_obState));
+  }
+
+  function startOnboarding() {
+    _obLoad();
+    document.getElementById('ob-modal').style.display = 'flex';
+    _obRender();
+  }
+
+  function _obClose() {
+    document.getElementById('ob-modal').style.display = 'none';
+    sessionStorage.removeItem('ob_state');
+    showPage('dashboard');
+  }
+
+  function _obRender() {
+    const s = OB_STEPS[_obStep];
+    document.getElementById('ob-title').textContent = s.title;
+    document.getElementById('ob-sub').textContent   = s.sub;
+
+    // Progress dots
+    document.getElementById('ob-steps').innerHTML = OB_STEPS.map((_, i) => {
+      const cls = i < _obStep  ? 'w-2 h-2 rounded-full bg-blue-500'
+                : i === _obStep ? 'w-2 h-2 rounded-full bg-blue-600 ring-2 ring-blue-200'
+                :                  'w-2 h-2 rounded-full bg-slate-200';
+      return `<span class="${cls}"></span>`;
+    }).join('');
+
+    const renders = [_obRender1, _obRender2, _obRender3, _obRender4, _obRender5];
+    renders[_obStep]();
+  }
+
+  // Step 1 — Create workspace
+  function _obRender1() {
+    document.getElementById('ob-body').innerHTML = `
+      <div class="space-y-3">
+        <div><label class="block text-xs font-semibold text-slate-500 mb-1">Workspace name</label>
+          <input id="ob-ws-name" type="text" placeholder="e.g. Acme Corp Intelligence"
+            class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value="${_esc(_obState.ws_name || '')}"/>
+        </div>
+        <p id="ob-err1" class="text-xs text-red-500 hidden"></p>
+      </div>`;
+    document.getElementById('ob-footer').innerHTML = `
+      <span></span>
+      <button onclick="_obNext1()" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition">Continue →</button>`;
+  }
+
+  async function _obNext1() {
+    const name = document.getElementById('ob-ws-name').value.trim();
+    const err  = document.getElementById('ob-err1');
+    if (!name) { err.textContent = 'Please enter a workspace name.'; err.classList.remove('hidden'); return; }
+    err.classList.add('hidden');
+    try {
+      const ws = await api('/api/workspaces', { method: 'POST', body: JSON.stringify({ name }) });
+      _workspaceId = ws.id;
+      sessionStorage.setItem('sh_workspace_id', ws.id);
+      // Refresh _me to include the new workspace
+      _me = await api('/api/me');
+      _renderUserMenu();
+      _obSave({ ws_name: name, ws_id: ws.id });
+      _obStep = 1; _obRender();
+    } catch(e) {
+      document.getElementById('ob-err1').textContent = e.message;
+      document.getElementById('ob-err1').classList.remove('hidden');
+    }
+  }
+
+  // Step 2 — Your company
+  function _obRender2() {
+    document.getElementById('ob-body').innerHTML = `
+      <div class="space-y-3">
+        <div><label class="block text-xs font-semibold text-slate-500 mb-1">Company name</label>
+          <input id="ob-co-name" type="text" placeholder="Acme Corp"
+            class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value="${_esc(_obState.co_name || '')}"/></div>
+        <div><label class="block text-xs font-semibold text-slate-500 mb-1">Company website</label>
+          <input id="ob-co-url" type="url" placeholder="https://acmecorp.com"
+            class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value="${_esc(_obState.co_url || '')}"/></div>
+        <p class="text-xs text-slate-400">We'll index your website as a baseline for comparisons.</p>
+        <p id="ob-err2" class="text-xs text-red-500 hidden"></p>
+      </div>`;
+    document.getElementById('ob-footer').innerHTML = `
+      <button onclick="_obBack()" class="text-sm text-slate-500 hover:text-slate-800 px-4 py-2 rounded-lg transition">← Back</button>
+      <button onclick="_obNext2()" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition">Continue →</button>`;
+  }
+
+  async function _obNext2() {
+    const name = document.getElementById('ob-co-name').value.trim();
+    const url  = document.getElementById('ob-co-url').value.trim();
+    const err  = document.getElementById('ob-err2');
+    if (!name || !url) { err.textContent = 'Please fill in both fields.'; err.classList.remove('hidden'); return; }
+    err.classList.add('hidden');
+    try {
+      await api(`/api/workspaces/${_workspaceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ company_name: name, company_url: url }),
+      });
+      await api('/api/sources/', {
+        method: 'POST',
+        body: JSON.stringify({ name, url, category: 'own', scrape_interval: 24 }),
+      });
+      _obSave({ co_name: name, co_url: url });
+      _obStep = 2; _obRender();
+    } catch(e) {
+      err.textContent = e.message; err.classList.remove('hidden');
+    }
+  }
+
+  // Step 3 — Add rivals
+  function _obRender3() {
+    const rivals = _obState.rivals || [{ name: '', url: '' }];
+    const rows = rivals.map((r, i) => `
+      <div class="flex gap-2 items-start" id="ob-rival-row-${i}">
+        <input type="text" placeholder="Name" value="${_esc(r.name)}"
+          class="w-1/3 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          oninput="_obUpdateRival(${i},'name',this.value)"/>
+        <input type="url" placeholder="https://competitor.com" value="${_esc(r.url)}"
+          class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          oninput="_obUpdateRival(${i},'url',this.value)"/>
+        ${rivals.length > 1 ? `<button onclick="_obRemoveRival(${i})" class="text-slate-300 hover:text-red-400 transition pt-2">✕</button>` : ''}
+      </div>`).join('');
+    document.getElementById('ob-body').innerHTML = `
+      <div class="space-y-3">
+        ${rows}
+        ${rivals.length < 3 ? `<button onclick="_obAddRival()" class="text-xs text-blue-600 hover:underline">+ Add another rival</button>` : ''}
+        <p id="ob-err3" class="text-xs text-red-500 hidden"></p>
+      </div>`;
+    document.getElementById('ob-footer').innerHTML = `
+      <button onclick="_obBack()" class="text-sm text-slate-500 hover:text-slate-800 px-4 py-2 rounded-lg transition">← Back</button>
+      <div class="flex gap-2">
+        <button onclick="_obStep=3;_obSave();_obRender()" class="text-sm text-slate-400 hover:text-slate-700 px-4 py-2 rounded-lg transition">Skip for now</button>
+        <button onclick="_obNext3()" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition">Continue →</button>
+      </div>`;
+  }
+
+  function _obUpdateRival(i, key, val) {
+    const rivals = _obState.rivals || [{ name: '', url: '' }];
+    rivals[i] = { ...rivals[i], [key]: val };
+    _obSave({ rivals });
+  }
+  function _obAddRival() {
+    const rivals = _obState.rivals || [{ name: '', url: '' }];
+    rivals.push({ name: '', url: '' });
+    _obSave({ rivals }); _obRender();
+  }
+  function _obRemoveRival(i) {
+    const rivals = (_obState.rivals || []).filter((_, j) => j !== i);
+    _obSave({ rivals }); _obRender();
+  }
+
+  async function _obNext3() {
+    const rivals = (_obState.rivals || []).filter(r => r.url.trim());
+    if (!rivals.length) {
+      document.getElementById('ob-err3').textContent = 'Add at least one rival, or click Skip.';
+      document.getElementById('ob-err3').classList.remove('hidden'); return;
+    }
+    document.getElementById('ob-err3').classList.add('hidden');
+    for (const r of rivals) {
+      try {
+        await api('/api/sources/', {
+          method: 'POST',
+          body: JSON.stringify({ name: r.name || r.url, url: r.url, category: 'competitor', scrape_interval: 24 }),
+        });
+      } catch { /* skip duplicates */ }
+    }
+    _obSave({ rivals_added: true });
+    _obStep = 3; _obRender();
+  }
+
+  // Step 4 — Invite team (optional)
+  function _obRender4() {
+    document.getElementById('ob-body').innerHTML = `
+      <div class="space-y-3">
+        <div class="flex gap-2">
+          <input id="ob-invite-email" type="email" placeholder="colleague@company.com"
+            class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+          <button onclick="_obSendInvite()" class="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg transition">Invite</button>
+        </div>
+        <div id="ob-invited-list" class="space-y-1 text-xs text-slate-500"></div>
+        <p id="ob-invite-msg" class="text-xs hidden"></p>
+      </div>`;
+    document.getElementById('ob-footer').innerHTML = `
+      <button onclick="_obBack()" class="text-sm text-slate-500 hover:text-slate-800 px-4 py-2 rounded-lg transition">← Back</button>
+      <button onclick="_obStep=4;_obSave();_obRender()" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition">Continue →</button>`;
+    _obRefreshInvited();
+  }
+
+  function _obRefreshInvited() {
+    const list = _obState.invited || [];
+    document.getElementById('ob-invited-list').innerHTML = list.map(e =>
+      `<span class="inline-flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">${_esc(e)} ✓</span>`
+    ).join(' ');
+  }
+
+  async function _obSendInvite() {
+    const email = document.getElementById('ob-invite-email').value.trim();
+    const msg   = document.getElementById('ob-invite-msg');
+    if (!email) return;
+    try {
+      await api(`/api/workspaces/${_workspaceId}/invites`, {
+        method: 'POST', body: JSON.stringify({ email, role: 'member' }),
+      });
+      const invited = [...(_obState.invited || []), email];
+      _obSave({ invited });
+      document.getElementById('ob-invite-email').value = '';
+      msg.className = 'text-xs text-emerald-600'; msg.textContent = `Invite sent to ${email}`;
+      msg.classList.remove('hidden');
+      _obRefreshInvited();
+    } catch(e) {
+      msg.className = 'text-xs text-red-500'; msg.textContent = e.message; msg.classList.remove('hidden');
+    }
+  }
+
+  // Step 5 — First sweep
+  function _obRender5() {
+    document.getElementById('ob-body').innerHTML = `
+      <div class="space-y-4">
+        <p class="text-sm text-slate-600">We'll kick off the first crawl now. You can close this and check the Dashboard while it runs.</p>
+        <div id="ob-sweep-status" class="text-sm text-slate-500"></div>
+      </div>`;
+    document.getElementById('ob-footer').innerHTML = `
+      <span></span>
+      <button onclick="_obFinish()" id="ob-finish-btn" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition">Start sweep &amp; open app</button>`;
+  }
+
+  async function _obFinish() {
+    document.getElementById('ob-finish-btn').disabled = true;
+    document.getElementById('ob-sweep-status').textContent = 'Starting scrapes…';
+    try {
+      await api('/api/scraper/run-all', { method: 'POST' });
+      // Mark workspace as onboarded
+      await api(`/api/workspaces/${_workspaceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ onboarded_at: new Date().toISOString() }),
+      });
+      startStatusPolling();
+    } catch { /* ignore — scrape errors don't block completion */ }
+    _obClose();
+  }
+
+  function _obBack() { if (_obStep > 0) { _obStep--; _obRender(); } }
+
+  // ── Settings (Task 10) ────────────────────────────────
+  function showSettingsTab(tab) {
+    ['account','workspace','team','monitoring'].forEach(t => {
+      document.getElementById('st-' + t)?.classList.toggle('hidden', t !== tab);
+      document.querySelector(`[data-st="${t}"]`)?.classList.toggle('active', t === tab);
+    });
+  }
+
+  async function loadSettings() {
+    try {
+      const data = await api('/api/settings');
+      const ws   = data.workspace || {};
+      const pref = data.preferences || {};
+      const role = data.role || 'viewer';
+      const isAdmin = ['owner','admin'].includes(role);
+
+      // Account tab
+      document.getElementById('st-full-name').value = _me?.user?.full_name || '';
+      document.getElementById('st-email').value     = _me?.user?.email || '';
+
+      // Workspace tab
+      document.getElementById('st-ws-name').value      = ws.name || '';
+      document.getElementById('st-company-name').value = ws.company_name || '';
+      document.getElementById('st-company-url').value  = ws.company_url || '';
+      const wsForm  = document.getElementById('st-ws-form');
+      const wsNote  = document.getElementById('st-ws-readonly-note');
+      if (!isAdmin && wsForm) {
+        wsForm?.querySelectorAll('input').forEach(el => el.readOnly = true);
+        wsNote?.classList.remove('hidden');
+      }
+
+      // Monitoring tab
+      const seEl = document.getElementById('st-scrape-enabled');
+      if (seEl) seEl.checked = ws.scrape_enabled !== false;
+      const sfEl = document.getElementById('st-scrape-freq');
+      if (sfEl) sfEl.value = ws.scrape_frequency || 'daily';
+      const mpEl = document.getElementById('st-max-pages');
+      if (mpEl) mpEl.value = ws.crawl_max_pages || 50;
+      const slEl = document.getElementById('st-slack-url');
+      if (slEl) slEl.value = ws.slack_webhook_url || '';
+
+      // Team tab
+      await _loadTeam(isAdmin);
+    } catch(e) {
+      console.error('Settings load error', e);
+    }
+  }
+
+  async function _loadTeam(isAdmin) {
+    const list = document.getElementById('st-members-list');
+    const form = document.getElementById('st-invite-form');
+    try {
+      const members = await api(`/api/workspaces/${_workspaceId}/members`);
+      list.innerHTML = (members || []).map(m => {
+        const profile = m.profiles || {};
+        const name = profile.full_name || profile.email || m.user_id;
+        return `<div class="flex items-center justify-between gap-3 py-2 border-b border-slate-100 last:border-0">
+          <div>
+            <p class="text-sm font-medium text-slate-800">${_esc(name)}</p>
+            <p class="text-xs text-slate-400">${_esc(profile.email || '')}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400 capitalize">${_esc(m.role)}</span>
+          </div>
+        </div>`;
+      }).join('');
+      if (isAdmin) form?.classList.remove('hidden');
+    } catch(e) {
+      list.innerHTML = `<p class="text-red-400 text-sm">${_esc(e.message)}</p>`;
+    }
+  }
+
+  async function saveAccountField(field, value) {
+    const msg = document.getElementById('st-account-msg');
+    try {
+      await api('/api/me', { method: 'PATCH', body: JSON.stringify({ [field]: value }) });
+      if (_me) _me.user = { ..._me.user, [field]: value };
+      _renderUserMenu();
+      msg.textContent = 'Saved'; msg.className = 'text-xs text-emerald-600'; msg.classList.remove('hidden');
+      setTimeout(() => msg.classList.add('hidden'), 2000);
+    } catch(e) {
+      msg.textContent = e.message; msg.className = 'text-xs text-red-500'; msg.classList.remove('hidden');
+    }
+  }
+
+  async function saveWsSetting(field, value) {
+    const msgIds = { name: 'st-ws-msg', company_name: 'st-ws-msg', company_url: 'st-ws-msg',
+                     scrape_enabled: 'st-monitoring-msg', scrape_frequency: 'st-monitoring-msg',
+                     crawl_max_pages: 'st-monitoring-msg', slack_webhook_url: 'st-slack-msg' };
+    const msgId = msgIds[field] || 'st-monitoring-msg';
+    const msg = document.getElementById(msgId);
+    try {
+      await api('/api/settings/workspace', { method: 'PATCH', body: JSON.stringify({ [field]: value }) });
+      msg.textContent = 'Saved'; msg.className = 'text-xs text-emerald-600'; msg.classList.remove('hidden');
+      setTimeout(() => msg.classList.add('hidden'), 2000);
+    } catch(e) {
+      msg.textContent = e.message; msg.className = 'text-xs text-red-500'; msg.classList.remove('hidden');
+    }
+  }
+
+  async function sendInvite() {
+    const email = document.getElementById('st-invite-email').value.trim();
+    const role  = document.getElementById('st-invite-role').value;
+    const msg   = document.getElementById('st-invite-msg');
+    if (!email) return;
+    try {
+      await api(`/api/workspaces/${_workspaceId}/invites`, {
+        method: 'POST', body: JSON.stringify({ email, role }),
+      });
+      document.getElementById('st-invite-email').value = '';
+      msg.textContent = `Invite sent to ${email}`; msg.className = 'text-xs text-emerald-600'; msg.classList.remove('hidden');
+      setTimeout(() => msg.classList.add('hidden'), 3000);
+    } catch(e) {
+      msg.textContent = e.message; msg.className = 'text-xs text-red-500'; msg.classList.remove('hidden');
+    }
+  }
+
+  async function testSlack() {
+    const msg = document.getElementById('st-slack-msg');
+    try {
+      await api('/api/settings/slack/test', { method: 'POST' });
+      msg.textContent = '✓ Slack message sent!'; msg.className = 'text-xs text-emerald-600'; msg.classList.remove('hidden');
+    } catch(e) {
+      msg.textContent = e.message; msg.className = 'text-xs text-red-500'; msg.classList.remove('hidden');
+    }
+  }
 
   initAuth();
   

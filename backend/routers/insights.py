@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..auth import WorkspaceContext, get_workspace
 from ..database import get_service_db
 from ..models.schemas import ChatMessage
+from ..rate_limit import check_rate_limit
 from ..services.llm import chat_with_context, generate_source_summary, generate_comparison, generate_competitor_changes, generate_gtm_heatmap, generate_positioning_teardown, generate_campaign_messaging
 
 router = APIRouter()
@@ -14,6 +15,7 @@ router = APIRouter()
 @router.post("/chat")
 async def chat(message: ChatMessage, ws: WorkspaceContext = Depends(get_workspace)):
     """Ask a strategy question; GPT-4o answers using your scraped content."""
+    check_rate_limit(ws.workspace_id, "chat")
     answer, sources = await chat_with_context(message.message, workspace_id=ws.workspace_id)
     return {"answer": answer, "sources": sources}
 
@@ -55,13 +57,15 @@ async def summarise_source(source_id: str, ws: WorkspaceContext = Depends(get_wo
 
 
 @router.post("/comparison")
-async def competitive_comparison():
+async def competitive_comparison(ws: WorkspaceContext = Depends(get_workspace)):
     """Generate a McKinsey-style cross-competitor comparison from existing summaries."""
+    check_rate_limit(ws.workspace_id, "comparison")
     db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
         .select("id, name, url, category, summary, summary_generated_at")
+        .eq("workspace_id", ws.workspace_id)
         .eq("is_active", True)
         .eq("category", "competitor")
         .execute()
@@ -79,13 +83,14 @@ async def competitive_comparison():
 
 
 @router.get("/competitor-changes")
-async def competitor_changes():
+async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
     """Compare the latest scrape session vs the one before it for each competitor."""
     db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
         .select("id, name, url")
+        .eq("workspace_id", ws.workspace_id)
         .eq("category", "competitor")
         .eq("is_active", True)
         .execute()
@@ -158,13 +163,15 @@ async def competitor_changes():
 
 
 @router.get("/gtm-heatmap")
-async def gtm_heatmap():
+async def gtm_heatmap(ws: WorkspaceContext = Depends(get_workspace)):
+    check_rate_limit(ws.workspace_id, "gtm_heatmap")
     """Generate an ICP × competitor presence heatmap from scraped competitor content."""
     db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
         .select("id, name, url")
+        .eq("workspace_id", ws.workspace_id)
         .eq("is_active", True)
         .eq("category", "competitor")
         .execute()
@@ -211,6 +218,7 @@ async def gtm_heatmap():
     own_res = await asyncio.to_thread(
         lambda: db.table("sources")
         .select("id, name, url")
+        .eq("workspace_id", ws.workspace_id)
         .eq("is_active", True)
         .eq("category", "own")
         .execute()
@@ -234,13 +242,15 @@ async def gtm_heatmap():
 
 
 @router.get("/positioning-teardown")
-async def positioning_teardown():
+async def positioning_teardown(ws: WorkspaceContext = Depends(get_workspace)):
     """Reconstruct each competitor's positioning into against / for / claim / proof."""
+    check_rate_limit(ws.workspace_id, "positioning")
     db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
         .select("id, name, url")
+        .eq("workspace_id", ws.workspace_id)
         .eq("is_active", True)
         .eq("category", "competitor")
         .execute()
@@ -284,6 +294,7 @@ async def positioning_teardown():
     own_res = await asyncio.to_thread(
         lambda: db.table("sources")
         .select("id, name, url")
+        .eq("workspace_id", ws.workspace_id)
         .eq("is_active", True)
         .eq("category", "own")
         .execute()
@@ -301,13 +312,15 @@ async def positioning_teardown():
 
 
 @router.get("/campaign-messaging")
-async def campaign_messaging():
+async def campaign_messaging(ws: WorkspaceContext = Depends(get_workspace)):
     """Generate campaign messaging suggestions across five channels using competitor + own company intelligence."""
+    check_rate_limit(ws.workspace_id, "messaging")
     db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
         .select("id, name, url")
+        .eq("workspace_id", ws.workspace_id)
         .eq("is_active", True)
         .eq("category", "competitor")
         .execute()
@@ -350,6 +363,7 @@ async def campaign_messaging():
     own_res = await asyncio.to_thread(
         lambda: db.table("sources")
         .select("id, name, url")
+        .eq("workspace_id", ws.workspace_id)
         .eq("is_active", True)
         .eq("category", "own")
         .execute()

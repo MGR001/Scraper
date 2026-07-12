@@ -120,10 +120,12 @@ async def get_content(content_id: str, ws: WorkspaceContext = Depends(get_worksp
 
 
 @router.get("/news/digest")
-async def news_digest():
+async def news_digest(ws: WorkspaceContext = Depends(get_workspace)):
     """AI executive digest of news-category content from the last 5 days."""
     from datetime import datetime, timezone, timedelta
     from ..services.llm import generate_news_digest
+    from ..rate_limit import check_rate_limit
+    check_rate_limit(ws.workspace_id, "news_digest")
 
     db = get_service_db()
     cutoff = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
@@ -131,6 +133,7 @@ async def news_digest():
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
         .select("id, name, category")
+        .eq("workspace_id", ws.workspace_id)
         .eq("category", "news")
         .eq("is_active", True)
         .execute()
@@ -184,12 +187,14 @@ async def news_digest():
 
 
 @router.get("/news")
-async def news_feed(limit: int = 40, offset: int = 0, category: str | None = None):
+async def news_feed(limit: int = 40, offset: int = 0, category: str | None = None,
+                    ws: WorkspaceContext = Depends(get_workspace)):
     """Latest scraped pages — one entry per URL, fairly mixed across all sources."""
     db = get_service_db()
 
     sources_res = await asyncio.to_thread(
-        lambda: db.table("sources").select("id, name, category").execute()
+        lambda: db.table("sources").select("id, name, category")
+        .eq("workspace_id", ws.workspace_id).execute()
     )
     sources = [
         s for s in (sources_res.data or [])
@@ -231,22 +236,25 @@ async def news_feed(limit: int = 40, offset: int = 0, category: str | None = Non
 
 
 @router.get("/stats")
-async def get_stats():
+async def get_stats(ws: WorkspaceContext = Depends(get_workspace)):
     """Overview statistics for the dashboard."""
     db = get_service_db()
 
     sources_res = await asyncio.to_thread(
-        lambda: db.table("sources").select("id, is_active").execute()
+        lambda: db.table("sources").select("id, is_active")
+        .eq("workspace_id", ws.workspace_id).execute()
     )
     last_res = await asyncio.to_thread(
         lambda: db.table("scraped_content")
         .select("scraped_at")
+        .eq("workspace_id", ws.workspace_id)
         .order("scraped_at", desc=True)
         .limit(1)
         .execute()
     )
     count_res = await asyncio.to_thread(
-        lambda: db.table("scraped_content").select("id", count="exact").execute()
+        lambda: db.table("scraped_content").select("id", count="exact")
+        .eq("workspace_id", ws.workspace_id).execute()
     )
 
     sources = sources_res.data

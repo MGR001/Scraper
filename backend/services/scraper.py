@@ -12,7 +12,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from ..database import get_db
+from ..database import get_db, get_service_db
 from .embeddings import get_embedding
 
 logger = logging.getLogger(__name__)
@@ -249,7 +249,7 @@ async def _store_content_chunks(
 ) -> int:
     """Chunk, embed, and upsert content. Returns number of new chunks stored."""
     chunks = chunk_text(content)
-    db = get_db()
+    db = get_service_db()
     stored = 0
     now = datetime.now(timezone.utc).isoformat()
 
@@ -433,7 +433,7 @@ async def _scrape_feed(source_id: str, feed_url: str, session_id: str | None = N
             logger.error("Feed article failed %s: %s", article["url"], exc)
             errors += 1
 
-    db = get_db()
+    db = get_service_db()
     await asyncio.to_thread(
         lambda: db.table("sources")
         .update({"last_scraped_at": datetime.now(timezone.utc).isoformat()})
@@ -475,7 +475,7 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
         if not stale:
             return {"skipped": True, "reason": "already running"}
 
-    db = get_db()
+    db = get_service_db()
 
     # ── Create scrape session ─────────────────────────────────────────────────
     session_started_at = datetime.now(timezone.utc).isoformat()
@@ -654,7 +654,7 @@ async def scrape_and_store(source_id: str, url: str) -> int:
 
     stored = await _store_content_chunks(source_id, url, title, content)
 
-    db = get_db()
+    db = get_service_db()
     await asyncio.to_thread(
         lambda: db.table("sources")
         .update({"last_scraped_at": datetime.now(timezone.utc).isoformat()})

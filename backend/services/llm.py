@@ -4,7 +4,7 @@ import logging
 from openai import AsyncOpenAI
 
 from ..config import settings
-from ..database import get_db
+from ..database import get_db, get_service_db
 from .embeddings import get_embedding
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ async def get_relevant_context(question: str, top_k: int = 8,
                                workspace_id: str | None = None) -> list[dict]:
     """Vector-search Supabase for the most relevant content chunks."""
     embedding = await get_embedding(question)
-    db = get_db()
+    db = get_service_db()
     params: dict = {
         "query_embedding": embedding,
         "match_threshold": settings.match_threshold,

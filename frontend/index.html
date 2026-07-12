@@ -191,6 +191,10 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/></svg>
         Go to Market
       </button>
+      <button class="tab-btn" data-page="settings" onclick="showPage('settings')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        Settings
+      </button>
     </nav>
     <div class="px-3 pb-4 border-t border-border pt-3">
       <button onclick="signOut()" class="tab-btn w-full text-left text-slate-400 hover:text-red-600 hover:bg-red-50">
@@ -203,6 +207,19 @@
 
   <!-- ── Main content ───────────────────────────────── -->
   <main class="ml-52 flex-1 min-h-screen overflow-y-auto">
+
+  <!-- ── Onboarding Modal ───────────────────────────── -->
+  <div id="ob-modal" style="display:none" class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden" style="max-height:90vh">
+      <div class="p-6 border-b border-slate-200">
+        <div class="flex items-center gap-2 mb-4" id="ob-steps"></div>
+        <div class="text-xl font-bold text-slate-900" id="ob-title"></div>
+        <div class="text-sm text-slate-500 mt-1" id="ob-sub"></div>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6" id="ob-body"></div>
+      <div class="p-6 border-t border-slate-200 flex items-center justify-between gap-3" id="ob-footer"></div>
+    </div>
+  </div>
   <!-- ── URLs Modal ────────────────────────────────────── -->
   <div id="urls-modal" class="fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target===this)closeUrlsModal()">
     <div class="bg-card border border-border rounded-2xl w-full max-w-xl max-h-[75vh] flex flex-col shadow-2xl">
@@ -734,6 +751,111 @@
       </div>
     </div><!-- /gtm-sub-messaging -->
   </div><!-- /page-gtm -->
+
+  <!-- ── Settings ──────────────────────────────────── -->
+  <div id="page-settings" class="page p-6 max-w-3xl mx-auto">
+    <h1 class="text-2xl font-bold mb-5 text-slate-900">Settings</h1>
+    <div class="flex gap-0 border-b border-border mb-6">
+      <button class="src-tab-btn active" data-st="account"   onclick="showSettingsTab('account')">Account</button>
+      <button class="src-tab-btn"        data-st="workspace"  onclick="showSettingsTab('workspace')">Workspace</button>
+      <button class="src-tab-btn"        data-st="team"       onclick="showSettingsTab('team')">Team</button>
+      <button class="src-tab-btn"        data-st="monitoring" onclick="showSettingsTab('monitoring')">Monitoring</button>
+    </div>
+    <!-- Account -->
+    <div id="st-account">
+      <div class="bg-card border border-border rounded-xl p-5 mb-4">
+        <h2 class="text-base font-semibold text-slate-900 mb-4">Profile</h2>
+        <div class="space-y-3 max-w-sm">
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Full name</label>
+            <input id="st-full-name" type="text" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onblur="saveAccountField('full_name', this.value)" placeholder="Your name"/>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Email</label>
+            <input id="st-email" type="email" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-400" readonly/>
+          </div>
+          <p id="st-account-msg" class="text-xs hidden"></p>
+        </div>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-5">
+        <h2 class="text-base font-semibold text-slate-900 mb-3">Session</h2>
+        <button onclick="signOut()" class="text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg transition">Sign out</button>
+      </div>
+    </div>
+    <!-- Workspace -->
+    <div id="st-workspace" class="hidden">
+      <div class="bg-card border border-border rounded-xl p-5">
+        <h2 class="text-base font-semibold text-slate-900 mb-4">Workspace details</h2>
+        <div class="space-y-3 max-w-sm">
+          <div><label class="block text-xs font-semibold text-slate-500 mb-1">Name</label>
+            <input id="st-ws-name" type="text" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" onblur="saveWsSetting('name',this.value)"/></div>
+          <div><label class="block text-xs font-semibold text-slate-500 mb-1">Company name</label>
+            <input id="st-company-name" type="text" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" onblur="saveWsSetting('company_name',this.value)"/></div>
+          <div><label class="block text-xs font-semibold text-slate-500 mb-1">Company URL</label>
+            <input id="st-company-url" type="url" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" onblur="saveWsSetting('company_url',this.value)"/></div>
+          <p id="st-ws-msg" class="text-xs hidden"></p>
+        </div>
+        <p id="st-ws-readonly-note" class="hidden text-xs text-slate-400 mt-3">Only owners and admins can edit workspace settings.</p>
+      </div>
+    </div>
+    <!-- Team -->
+    <div id="st-team" class="hidden">
+      <div class="bg-card border border-border rounded-xl p-5">
+        <h2 class="text-base font-semibold text-slate-900 mb-4">Members</h2>
+        <div id="st-members-list" class="space-y-2 mb-5"><p class="text-slate-400 text-sm">Loading…</p></div>
+        <div id="st-invite-form" class="hidden border-t border-border pt-4">
+          <h3 class="text-sm font-semibold text-slate-700 mb-3">Invite a team member</h3>
+          <div class="flex gap-2 flex-wrap">
+            <input id="st-invite-email" type="email" placeholder="email@company.com"
+              class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" style="min-width:180px"/>
+            <select id="st-invite-role" class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+              <option value="viewer">Viewer</option>
+            </select>
+            <button onclick="sendInvite()" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">Invite</button>
+          </div>
+          <p id="st-invite-msg" class="text-xs mt-2 hidden"></p>
+        </div>
+      </div>
+    </div>
+    <!-- Monitoring -->
+    <div id="st-monitoring" class="hidden">
+      <div class="bg-card border border-border rounded-xl p-5 mb-4">
+        <h2 class="text-base font-semibold text-slate-900 mb-4">Crawl settings</h2>
+        <div class="space-y-4 max-w-sm">
+          <div class="flex items-center justify-between">
+            <div><p class="text-sm font-medium text-slate-800">Scraping enabled</p><p class="text-xs text-slate-400">Pause all automated scraping</p></div>
+            <input type="checkbox" id="st-scrape-enabled" class="w-4 h-4 accent-blue-600" onchange="saveWsSetting('scrape_enabled',this.checked)"/>
+          </div>
+          <div><label class="block text-xs font-semibold text-slate-500 mb-1">Frequency</label>
+            <select id="st-scrape-freq" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none" onchange="saveWsSetting('scrape_frequency',this.value)">
+              <option value="hourly">Hourly</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </div>
+          <div><label class="block text-xs font-semibold text-slate-500 mb-1">Max pages per crawl</label>
+            <input id="st-max-pages" type="number" min="5" max="500" step="5"
+              class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onblur="saveWsSetting('crawl_max_pages',parseInt(this.value,10)||50)"/>
+          </div>
+          <p id="st-monitoring-msg" class="text-xs hidden"></p>
+        </div>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-5">
+        <h2 class="text-base font-semibold text-slate-900 mb-4">Slack notifications</h2>
+        <div class="flex gap-2 max-w-sm">
+          <input id="st-slack-url" type="url" placeholder="https://hooks.slack.com/…"
+            class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onblur="saveWsSetting('slack_webhook_url',this.value||null)"/>
+          <button onclick="testSlack()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm px-3 py-2 rounded-lg transition">Test</button>
+        </div>
+        <p id="st-slack-msg" class="text-xs mt-2 hidden"></p>
+      </div>
+    </div>
+  </div><!-- /page-settings -->
 
   </main>
   </div><!-- end layout -->
