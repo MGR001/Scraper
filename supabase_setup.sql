@@ -7,14 +7,17 @@ create extension if not exists vector;
 
 -- 2. Sources: websites to monitor
 create table if not exists sources (
-  id              uuid primary key default gen_random_uuid(),
-  name            text not null,
-  url             text not null,
-  category        text not null default 'general',  -- competitor | news | market | general
-  scrape_interval integer not null default 24,       -- hours between scrapes
-  last_scraped_at timestamptz,
-  is_active       boolean not null default true,
-  created_at      timestamptz default now(),
+  id                   uuid primary key default gen_random_uuid(),
+  name                 text not null,
+  url                  text not null,
+  category             text not null default 'general',  -- competitor | news | market | general
+  scrape_interval      integer not null default 24,       -- hours between scrapes
+  last_scraped_at      timestamptz,
+  is_active            boolean not null default true,
+  created_at           timestamptz default now(),
+  sitemap_url          text,
+  summary              text,
+  summary_generated_at timestamptz,
   constraint sources_url_unique unique (url)
 );
 
@@ -68,3 +71,11 @@ as $$
   order by sc.embedding <=> query_embedding
   limit match_count;
 $$;
+
+-- ============================================================
+-- Migration: apply to existing databases (idempotent)
+-- ============================================================
+alter table sources
+  add column if not exists sitemap_url          text,
+  add column if not exists summary              text,
+  add column if not exists summary_generated_at timestamptz;
