@@ -12,13 +12,11 @@
     if (name === 'news')        loadNews();
   }
 
-  // ── API key (prompted once, held in memory) ──────────
+  // ── API key (from login page, held in sessionStorage) ──
   let _apiKey = sessionStorage.getItem('sh_api_key') || '';
+  if (!_apiKey) { window.location.replace('/login'); }
   function ensureApiKey() {
-    if (!_apiKey) {
-      _apiKey = prompt('Enter your RIvals API key:') || '';
-      if (_apiKey) sessionStorage.setItem('sh_api_key', _apiKey);
-    }
+    if (!_apiKey) window.location.replace('/login');
     return _apiKey;
   }
 
@@ -32,13 +30,19 @@
     if (res.status === 401) {
       _apiKey = '';
       sessionStorage.removeItem('sh_api_key');
-      throw new Error('Invalid API key — please reload and try again.');
+      window.location.replace('/login');
+      throw new Error('Session expired — redirecting to login.');
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(err.detail || 'Request failed');
     }
     return res.status === 204 ? null : res.json();
+  }
+
+  function signOut() {
+    sessionStorage.removeItem('sh_api_key');
+    window.location.href = '/login';
   }
 
   function fmtDate(iso) {

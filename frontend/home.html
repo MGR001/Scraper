@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RIvals — Competitive intelligence for product marketers who are done guessing</title>
+<meta name="description" content="RIvals watches your competitors' sites, feeds and forums every night, then sends one brief: what changed, what customers are saying, and what to say back.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --paper:      #F6F8FA;
+  --surface:    #FFFFFF;
+  --ink:        #0D1B2A;
+  --ink-soft:   #3C4C5C;
+  --muted:      #6B7C8C;
+  --line:       #E3E8ED;
+  --line-soft:  #EDF1F4;
+  --navy:       #12314F;
+  --you:        #0E7C7B;
+  --you-wash:   #E6F3F2;
+  --them:       #B4241C;
+  --them-wash:  #FBECEA;
+  --amber:      #B07A12;
+
+  --sans:'Instrument Sans', system-ui, -apple-system, sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, monospace;
+
+  --r-sm:6px; --r:10px; --r-lg:16px;
+  --shadow-sm:0 1px 2px rgba(13,27,42,.05), 0 1px 3px rgba(13,27,42,.04);
+  --shadow:   0 4px 12px rgba(13,27,42,.06), 0 1px 3px rgba(13,27,42,.04);
+  --shadow-lg:0 18px 44px rgba(13,27,42,.10), 0 2px 8px rgba(13,27,42,.05);
+
+  --gutter: clamp(1.25rem, 5vw, 4.5rem);
+  --max: 1180px;
+}
+*,*::before,*::after{ box-sizing:border-box; margin:0; padding:0 }
+html{ scroll-behavior:smooth }
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:var(--sans); font-size:16.5px; line-height:1.6;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+a{ color:inherit; text-decoration:none }
+:focus-visible{ outline:2px solid var(--you); outline-offset:2px; border-radius:3px }
+.shell{ max-width:var(--max); margin:0 auto; padding-inline:var(--gutter) }
+
+h1,h2,h3{ letter-spacing:-.025em; line-height:1.1 }
+.eyebrow{
+  font-family:var(--mono); font-size:.7rem; font-weight:500;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--you);
+}
+.eyebrow.warn{ color:var(--them) }
+.h2{ font-size:clamp(1.8rem, 3.5vw, 2.6rem); font-weight:700; margin:.65rem 0 .85rem }
+.lede{ color:var(--muted); font-size:1.05rem; max-width:56ch }
+
+.btn{
+  display:inline-flex; align-items:center; gap:.5rem;
+  font-family:var(--sans); font-size:.94rem; font-weight:600;
+  padding:.72rem 1.25rem; border-radius:var(--r-sm);
+  border:1px solid transparent; cursor:pointer;
+  transition:background .16s ease, box-shadow .16s ease, transform .12s ease, border-color .16s ease;
+}
+.btn:active{ transform:translateY(1px) }
+.btn-primary{ background:var(--navy); color:#fff; box-shadow:var(--shadow-sm) }
+.btn-primary:hover{ background:#1B4370; box-shadow:var(--shadow) }
+.btn-ghost{ background:var(--surface); color:var(--ink); border-color:var(--line) }
+.btn-ghost:hover{ border-color:#C9D2DA; box-shadow:var(--shadow-sm) }
+.btn-outline-light{ background:transparent; color:#fff; border-color:rgba(255,255,255,.35) }
+.btn-outline-light:hover{ border-color:#fff }
+
+/* NAV */
+.nav{
+  position:sticky; top:0; z-index:60;
+  background:rgba(246,248,250,.88); backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.nav-in{
+  max-width:var(--max); margin:0 auto; padding:.85rem var(--gutter);
+  display:flex; align-items:center; justify-content:space-between; gap:1rem;
+}
+.mark{ display:flex; align-items:center; gap:.55rem; font-weight:700; font-size:1.12rem; letter-spacing:-.02em }
+.glyph{ width:22px; height:22px; border-radius:5px; background:var(--navy); position:relative; flex:0 0 auto }
+.glyph::after{
+  content:""; position:absolute; left:50%; top:4px; bottom:4px;
+  width:1.5px; margin-left:-.75px; background:#fff; opacity:.85;
+}
+.nav-links{ display:flex; align-items:center; gap:1.6rem; font-size:.92rem; font-weight:500; color:var(--ink-soft) }
+.nav-links a:hover{ color:var(--ink) }
+@media (max-width:880px){ .nav-links a:not(.btn){ display:none } }
+
+/* HERO */
+.hero{
+  padding:clamp(3rem,6vw,5.25rem) 0 clamp(2.5rem,4vw,3.25rem);
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.02fr);
+  gap:clamp(2rem,4.5vw,4rem); align-items:center;
+}
+@media (max-width:1000px){ .hero{ grid-template-columns:1fr } }
+.hero h1{ font-size:clamp(2.3rem,4.7vw,3.65rem); font-weight:700; margin:.85rem 0 1.05rem }
+.hero h1 .accent{ color:var(--them); position:relative; white-space:nowrap }
+.hero h1 .accent::after{
+  content:""; position:absolute; left:0; right:0; bottom:.06em;
+  height:.09em; background:var(--them); opacity:.18; border-radius:2px;
+}
+.hero .lede{ max-width:48ch; font-size:1.11rem }
+.hero-actions{ display:flex; flex-wrap:wrap; gap:.75rem; margin-top:1.85rem }
+.hero-note{ margin-top:1.05rem; font-size:.86rem; color:var(--muted); display:flex; align-items:center; gap:.45rem }
+.check{ color:var(--you); font-weight:700 }
+
+/* TAPE (head-to-head card) */
+.tape{
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r-lg); box-shadow:var(--shadow-lg); overflow:hidden;
+}
+.tape-bar{
+  display:flex; align-items:center; justify-content:space-between; gap:1rem;
+  padding:.7rem 1rem; border-bottom:1px solid var(--line-soft); background:#FBFCFD;
+  font-family:var(--mono); font-size:.67rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted);
+}
+.live{ display:inline-flex; align-items:center; gap:.45rem; color:var(--ink-soft) }
+.dot{
+  width:7px; height:7px; border-radius:50%; background:var(--you);
+  box-shadow:0 0 0 3px var(--you-wash); animation:blink 2.2s ease-in-out infinite;
+}
+@keyframes blink{ 0%,100%{opacity:1} 50%{opacity:.35} }
+.tape-head{ display:grid; grid-template-columns:1fr auto 1fr; border-bottom:1px solid var(--line) }
+.corner{ padding:1rem 1.15rem; min-width:0 }
+.corner .role{
+  font-family:var(--mono); font-size:.62rem; letter-spacing:.15em;
+  text-transform:uppercase; color:var(--muted);
+}
+.corner .who{
+  font-size:1.1rem; font-weight:700; letter-spacing:-.02em; margin-top:.2rem;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.corner-you{ background:linear-gradient(180deg,var(--you-wash),#fff 78%) }
+.corner-you .who{ color:var(--you) }
+.corner-them{ background:linear-gradient(180deg,var(--them-wash),#fff 78%); text-align:right }
+.corner-them .who{ color:var(--them) }
+.vs{
+  display:grid; place-items:center; padding:0 .9rem; background:#fff;
+  border-left:1px solid var(--line); border-right:1px solid var(--line);
+  font-family:var(--mono); font-size:.66rem; font-weight:600;
+  letter-spacing:.12em; color:var(--muted);
+}
+.tape-rows{ list-style:none }
+.tape-row{ display:grid; grid-template-columns:1fr auto 1fr; align-items:stretch; border-bottom:1px solid var(--line-soft) }
+.tape-row:last-child{ border-bottom:0 }
+.metric{
+  display:grid; place-items:center; padding:.45rem .9rem; text-align:center;
+  border-left:1px solid var(--line-soft); border-right:1px solid var(--line-soft);
+  font-family:var(--mono); font-size:.6rem; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--muted); white-space:nowrap;
+}
+.val{
+  font-family:var(--mono); font-weight:600; font-size:clamp(1.15rem,2.5vw,1.45rem);
+  padding:.68rem 1.15rem; font-variant-numeric:tabular-nums;
+  display:flex; align-items:center;
+}
+.val-you{ color:var(--you) }
+.val-them{ color:var(--them); justify-content:flex-end }
+.val-them.flag{ background:var(--them-wash) }
+.tape-foot{
+  padding:.85rem 1.15rem; border-top:1px solid var(--line); background:#FBFCFD;
+  display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap;
+}
+.tape-foot .read{ font-size:.86rem; color:var(--ink-soft) }
+.tape-foot .read b{ color:var(--ink); font-weight:600 }
+.mini-btn{
+  font-family:var(--mono); font-size:.64rem; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--navy); font-weight:600; background:#fff;
+  border:1px solid var(--line); border-radius:var(--r-sm);
+  padding:.4rem .7rem; cursor:pointer;
+  transition:border-color .16s ease, box-shadow .16s ease;
+}
+.mini-btn:hover{ border-color:#C9D2DA; box-shadow:var(--shadow-sm) }
+
+/* TRUST */
+.trust{ border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--surface) }
+.trust-in{
+  max-width:var(--max); margin:0 auto; padding:1.35rem var(--gutter);
+  display:flex; align-items:center; gap:clamp(1rem,4vw,2.5rem); flex-wrap:wrap;
+}
+.trust-label{
+  font-family:var(--mono); font-size:.65rem; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--muted); flex:0 0 auto;
+}
+.logos{ display:flex; align-items:center; gap:clamp(1.25rem,3.5vw,2.4rem); flex-wrap:wrap }
+.logo{ font-weight:700; font-size:1rem; letter-spacing:-.02em; opacity:.42; transition:opacity .2s ease }
+.logo:hover{ opacity:.75 }
+
+/* THE WEEK */
+.week{ padding:clamp(3.5rem,7vw,5.5rem) 0 }
+.week-head{ max-width:62ch; margin-bottom:clamp(1.75rem,3.5vw,2.5rem) }
+.ledger{
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r-lg); overflow:hidden; box-shadow:var(--shadow);
+}
+.ledger-head{
+  display:grid; grid-template-columns:1fr 1fr; border-bottom:1px solid var(--line);
+}
+.ledger-head div{ padding:.9rem 1.35rem }
+.ledger-head .now{ background:var(--them-wash); border-right:1px solid var(--line) }
+.ledger-head .with{ background:var(--you-wash) }
+.ledger-head .tag{
+  font-family:var(--mono); font-size:.62rem; letter-spacing:.15em;
+  text-transform:uppercase; color:var(--muted);
+}
+.ledger-head .name{ font-weight:700; font-size:1.05rem; margin-top:.15rem; letter-spacing:-.02em }
+.ledger-head .now .name{ color:var(--them) }
+.ledger-head .with .name{ color:var(--you) }
+.ledger-rows{ list-style:none }
+.ledger-rows li{
+  display:grid; grid-template-columns:1fr 1fr;
+  border-bottom:1px solid var(--line-soft);
+}
+.ledger-rows li:last-child{ border-bottom:0 }
+.cell{ padding:1.05rem 1.35rem; font-size:.96rem; display:flex; gap:.65rem; align-items:flex-start }
+.cell.now{ border-right:1px solid var(--line); color:var(--muted) }
+.cell.with{ color:var(--ink) }
+.cell .sig{ font-family:var(--mono); font-weight:600; flex:0 0 auto; line-height:1.5 }
+.cell.now .sig{ color:var(--them) }
+.cell.with .sig{ color:var(--you) }
+@media (max-width:760px){
+  .ledger-head{ grid-template-columns:1fr }
+  .ledger-head .now{ border-right:0; border-bottom:1px solid var(--line) }
+  .ledger-rows li{ grid-template-columns:1fr }
+  .cell.now{ border-right:0; border-bottom:1px dashed var(--line) }
+}
+
+/* THE BRIEF */
+.brief-sec{ background:var(--surface); border-top:1px solid var(--line); border-bottom:1px solid var(--line) }
+.brief-grid{
+  display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,.85fr);
+  gap:clamp(2rem,4vw,3.5rem);
+  padding:clamp(3.5rem,7vw,5.5rem) 0;
+  align-items:start;
+}
+@media (max-width:1000px){ .brief-grid{ grid-template-columns:1fr } }
+.mail{
+  background:var(--paper); border:1px solid var(--line);
+  border-radius:var(--r-lg); overflow:hidden; box-shadow:var(--shadow-lg);
+}
+.mail-bar{
+  padding:.85rem 1.2rem; background:#fff; border-bottom:1px solid var(--line);
+  display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;
+}
+.mail-from{ font-size:.9rem; font-weight:600 }
+.mail-from span{ color:var(--muted); font-weight:400 }
+.mail-time{ font-family:var(--mono); font-size:.68rem; color:var(--muted); letter-spacing:.06em }
+.mail-subject{ padding:1rem 1.2rem .5rem; font-size:1.12rem; font-weight:700; letter-spacing:-.02em }
+.mail-sub{ padding:0 1.2rem 1rem; font-size:.9rem; color:var(--muted) }
+.mail-items{ list-style:none; border-top:1px solid var(--line) }
+.mail-items li{
+  padding:1.05rem 1.2rem; border-bottom:1px solid var(--line);
+  background:#fff; display:grid; gap:.35rem;
+}
+.mail-items li:last-child{ border-bottom:0 }
+.mi-top{ display:flex; align-items:center; gap:.6rem; flex-wrap:wrap }
+.chip{
+  font-family:var(--mono); font-size:.62rem; font-weight:600; letter-spacing:.05em;
+  padding:.26rem .55rem; border-radius:100px; white-space:nowrap;
+}
+.chip-neg{ background:var(--them-wash); color:var(--them) }
+.chip-pos{ background:var(--you-wash); color:var(--you) }
+.chip-neu{ background:#F0F3F6; color:var(--ink-soft) }
+.mi-who{ font-family:var(--mono); font-size:.68rem; color:var(--muted) }
+.mi-line{ font-size:.97rem; font-weight:600 }
+.mi-do{ font-size:.9rem; color:var(--muted) }
+.mi-do b{ color:var(--you); font-weight:600 }
+.mail-foot{
+  padding:.85rem 1.2rem; background:#FBFCFD; border-top:1px solid var(--line);
+  font-family:var(--mono); font-size:.66rem; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--muted);
+  display:flex; justify-content:space-between; gap:.75rem; flex-wrap:wrap;
+}
+.notes{ position:sticky; top:5.5rem }
+@media (max-width:1000px){ .notes{ position:static } }
+.note{ padding-left:1.1rem; border-left:2px solid var(--line); margin-bottom:1.6rem }
+.note:last-child{ margin-bottom:0 }
+.note.on{ border-left-color:var(--you) }
+.note h3{ font-size:1.02rem; font-weight:700; margin-bottom:.3rem }
+.note p{ font-size:.94rem; color:var(--muted) }
+
+/* ICP */
+.roles{ padding:clamp(3.5rem,7vw,5.5rem) 0 }
+.role-list{ list-style:none; border-top:1px solid var(--line) }
+.role-row{
+  display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr) minmax(0,1.1fr);
+  gap:clamp(1rem,3vw,2.5rem);
+  padding:1.9rem 0;
+  border-bottom:1px solid var(--line);
+  align-items:start;
+  transition:background .2s ease;
+}
+.role-row:hover{ background:var(--surface) }
+@media (max-width:920px){ .role-row{ grid-template-columns:1fr; gap:.9rem } }
+.role-who .job{ font-size:1.15rem; font-weight:700; letter-spacing:-.02em }
+.role-who .co{ font-family:var(--mono); font-size:.67rem; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); margin-top:.3rem }
+.role-q, .role-a{ font-size:.98rem }
+.role-lab{ font-family:var(--mono); font-size:.6rem; letter-spacing:.14em; text-transform:uppercase; margin-bottom:.4rem }
+.role-q .role-lab{ color:var(--them) }
+.role-a .role-lab{ color:var(--you) }
+.role-q p{ color:var(--ink); font-weight:500 }
+.role-a p{ color:var(--muted) }
+
+/* SIGNAL */
+.signal{
+  background:var(--navy); color:#fff;
+  background-image:
+    radial-gradient(80% 120% at 92% 0%, rgba(14,124,123,.30), transparent 60%),
+    radial-gradient(70% 110% at 4% 100%, rgba(180,36,28,.22), transparent 62%);
+}
+.signal-in{
+  max-width:var(--max); margin:0 auto; padding:clamp(3.5rem,7vw,5.5rem) var(--gutter);
+  display:grid; grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);
+  gap:clamp(2rem,4vw,3.5rem); align-items:center;
+}
+@media (max-width:1000px){ .signal-in{ grid-template-columns:1fr } }
+.signal .eyebrow{ color:#8FD6D2 }
+.signal h2{ font-size:clamp(1.8rem,3.5vw,2.6rem); font-weight:700; margin:.65rem 0 .9rem }
+.signal p.lede{ color:rgba(255,255,255,.7) }
+.signal .kv{ margin-top:1.75rem; display:flex; gap:2rem; flex-wrap:wrap }
+.kv div .n{ font-family:var(--mono); font-size:1.5rem; font-weight:600; color:#fff }
+.kv div .l{ font-size:.85rem; color:rgba(255,255,255,.6) }
+.panel{
+  background:var(--surface); border-radius:var(--r-lg);
+  box-shadow:var(--shadow-lg); overflow:hidden; color:var(--ink);
+}
+.panel-bar{
+  display:flex; align-items:center; justify-content:space-between; gap:1rem;
+  padding:.75rem 1.1rem; border-bottom:1px solid var(--line); background:#FBFCFD;
+  font-family:var(--mono); font-size:.66rem; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--muted);
+}
+.feed{ list-style:none }
+.feed li{
+  display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1rem; align-items:center;
+  padding:.9rem 1.1rem; border-bottom:1px solid var(--line-soft);
+}
+.feed li:last-child{ border-bottom:0 }
+.feed .src{ font-family:var(--mono); font-size:.67rem; color:var(--muted); margin-bottom:.2rem }
+.feed .quote{ font-size:.94rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+
+/* FAQ */
+.faq{ padding:clamp(3.5rem,7vw,5.5rem) 0 }
+.faq-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:.9rem 2.5rem }
+.q{ border-top:1px solid var(--line); padding-top:1.15rem; padding-bottom:.4rem }
+.q h3{ font-size:1rem; font-weight:700; margin-bottom:.35rem }
+.q p{ font-size:.94rem; color:var(--muted) }
+
+/* CTA */
+.cta{ background:var(--surface); border-top:1px solid var(--line) }
+.cta-in{
+  max-width:var(--max); margin:0 auto;
+  padding:clamp(3.5rem,7vw,5.5rem) var(--gutter);
+  display:grid; grid-template-columns:minmax(0,1fr) auto;
+  gap:2rem; align-items:center;
+}
+@media (max-width:860px){ .cta-in{ grid-template-columns:1fr } }
+.cta h2{ font-size:clamp(1.8rem,3.6vw,2.7rem); font-weight:700; max-width:19ch; margin:.6rem 0 .8rem }
+.cta p{ color:var(--muted); max-width:46ch }
+.cta-actions{ display:flex; gap:.75rem; flex-wrap:wrap }
+.cta small{
+  display:block; margin-top:1rem; font-family:var(--mono);
+  font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
+}
+
+.foot{ background:var(--paper); border-top:1px solid var(--line) }
+.foot-in{
+  max-width:var(--max); margin:0 auto; padding:1.8rem var(--gutter);
+  display:flex; align-items:center; justify-content:space-between;
+  gap:1rem; flex-wrap:wrap; font-size:.87rem; color:var(--muted);
+}
+.foot nav{ display:flex; gap:1.5rem; flex-wrap:wrap }
+.foot a:hover{ color:var(--ink) }
+
+/* Motion */
+.rise{ opacity:0; transform:translateY(12px); animation:rise .6s cubic-bezier(.2,.7,.3,1) forwards }
+@keyframes rise{ to{ opacity:1; transform:none } }
+.d1{animation-delay:.04s}.d2{animation-delay:.11s}.d3{animation-delay:.19s}.d4{animation-delay:.27s}
+.reveal{ opacity:0; transform:translateY(16px); transition:opacity .6s ease, transform .6s cubic-bezier(.2,.7,.3,1) }
+.reveal.seen{ opacity:1; transform:none }
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{ animation:none !important; transition:none !important }
+  .rise,.reveal{ opacity:1; transform:none }
+  html{ scroll-behavior:auto }
+}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-in">
+    <a href="/" class="mark"><span class="glyph"></span> RIvals</a>
+    <nav class="nav-links">
+      <a href="#week">Why</a>
+      <a href="#brief">The brief</a>
+      <a href="#who">Who it's for</a>
+      <a href="/login" class="btn btn-primary">Sign in</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- HERO -->
+<section class="shell hero">
+  <div>
+    <p class="eyebrow rise d1">Competitive intelligence for B2B product marketers</p>
+    <h1 class="rise d2">Sales just asked how to beat them. Your battlecard is from <span class="accent">March</span>.</h1>
+    <p class="lede rise d3">
+      RIvals reads your competitors' sites, feeds and forums every night, then sends one brief:
+      what they changed, what their customers are saying about it, and what you should say back.
+    </p>
+    <div class="hero-actions rise d4">
+      <a href="/login" class="btn btn-primary">Open the app</a>
+      <a href="#brief" class="btn btn-ghost">See a real brief</a>
+    </div>
+    <p class="hero-note rise d4">
+      <span class="check">✓</span> One URL to set up. First brief within the hour.
+    </p>
+  </div>
+
+  <div class="tape rise d3" aria-label="Head-to-head summary, last 30 days">
+    <div class="tape-bar">
+      <span class="live"><span class="dot"></span>Live</span>
+      <span>Last 30 days</span>
+    </div>
+    <div class="tape-head">
+      <div class="corner corner-you">
+        <div class="role">You</div>
+        <div class="who">Northgate</div>
+      </div>
+      <div class="vs">VS</div>
+      <div class="corner corner-them">
+        <div class="role">Watching</div>
+        <div class="who">Halcyon</div>
+      </div>
+    </div>
+    <ul class="tape-rows">
+      <li class="tape-row">
+        <span class="val val-you">2</span>
+        <span class="metric">Pricing moves</span>
+        <span class="val val-them flag" data-count="7">7</span>
+      </li>
+      <li class="tape-row">
+        <span class="val val-you">1</span>
+        <span class="metric">Messaging shifts</span>
+        <span class="val val-them" data-count="4">4</span>
+      </li>
+      <li class="tape-row">
+        <span class="val val-you">12</span>
+        <span class="metric">Pages shipped</span>
+        <span class="val val-them" data-count="38">38</span>
+      </li>
+      <li class="tape-row">
+        <span class="val val-you" id="sent-you">+0.41</span>
+        <span class="metric">Sentiment</span>
+        <span class="val val-them flag" id="sent-them">−0.12</span>
+      </li>
+      <li class="tape-row">
+        <span class="val val-you">3</span>
+        <span class="metric">Switching intent</span>
+        <span class="val val-them" data-count="19">19</span>
+      </li>
+    </ul>
+    <div class="tape-foot">
+      <span class="read"><b>Read:</b> Halcyon is squeezing price and losing goodwill.</span>
+      <a href="/login" class="mini-btn">Open app →</a>
+    </div>
+  </div>
+</section>
+
+<!-- TRUST -->
+<section class="trust">
+  <div class="trust-in">
+    <span class="trust-label">Product marketing teams at</span>
+    <div class="logos">
+      <span class="logo">Meridian</span>
+      <span class="logo">Kestrel</span>
+      <span class="logo">Foundry&nbsp;9</span>
+      <span class="logo">Arcline</span>
+      <span class="logo">Vantage</span>
+    </div>
+  </div>
+</section>
+
+<!-- THE WEEK -->
+<section class="shell week" id="week">
+  <div class="week-head reveal">
+    <p class="eyebrow warn">The Friday job</p>
+    <h2 class="h2">You already run competitive intel. It just runs on you.</h2>
+    <p class="lede">
+      Eleven tabs, a slide deck that ages in public, and the sinking feeling that the thing
+      you needed to know turned up in a lost-deal note. Here's the same week, both ways.
+    </p>
+  </div>
+  <div class="ledger reveal">
+    <div class="ledger-head">
+      <div class="now"><div class="tag">Your week now</div><div class="name">Manual</div></div>
+      <div class="with"><div class="tag">Your week with RIvals</div><div class="name">Handled</div></div>
+    </div>
+    <ul class="ledger-rows">
+      <li>
+        <div class="cell now"><span class="sig">—</span><span>You check eleven competitor sites by hand, when you remember.</span></div>
+        <div class="cell with"><span class="sig">✓</span><span>Every page on every rival, re-read and diffed while you sleep.</span></div>
+      </li>
+      <li>
+        <div class="cell now"><span class="sig">—</span><span>The battlecard says March. Sales has stopped opening it.</span></div>
+        <div class="cell with"><span class="sig">✓</span><span>Battlecards rewrite themselves after each sweep. Always current.</span></div>
+      </li>
+      <li>
+        <div class="cell now"><span class="sig">—</span><span>You find out about their pricing change from a lost-deal note.</span></div>
+        <div class="cell with"><span class="sig">✓</span><span>Pricing moves hit Slack the morning they happen, not the quarter after.</span></div>
+      </li>
+      <li>
+        <div class="cell now"><span class="sig">—</span><span>Someone asks why churn is up. You have a theory, not a reason.</span></div>
+        <div class="cell with"><span class="sig">✓</span><span>Nineteen people said they're switching, and told you exactly why.</span></div>
+      </li>
+      <li>
+        <div class="cell now"><span class="sig">—</span><span>Campaign angles come out of a workshop and a whiteboard.</span></div>
+        <div class="cell with"><span class="sig">✓</span><span>Angles come out of the gaps your rivals left open last week.</span></div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- THE BRIEF -->
+<section class="brief-sec" id="brief">
+  <div class="shell brief-grid">
+    <div class="mail reveal">
+      <div class="mail-bar">
+        <span class="mail-from">RIvals <span>· to you</span></span>
+        <span class="mail-time">Mon 07:04</span>
+      </div>
+      <div class="mail-subject">3 moves overnight. One needs you today.</div>
+      <p class="mail-sub">Halcyon, Vantage and Kestrel · sweep completed 04:12</p>
+      <ul class="mail-items">
+        <li>
+          <div class="mi-top"><span class="chip chip-neg">Pricing</span><span class="mi-who">halcyon.com/pricing</span></div>
+          <div class="mi-line">Halcyon killed the $19 Starter tier. Free trial now gated behind sales.</div>
+          <div class="mi-do">→ <b>Do:</b> ship the "no cliff at seat 26" ad set. Draft is written.</div>
+        </li>
+        <li>
+          <div class="mi-top"><span class="chip chip-neg">Sentiment</span><span class="mi-who">r/sales · 412 upvotes</span></div>
+          <div class="mi-line">Support sentiment for Halcyon fell to −0.42. Nineteen mentions of switching.</div>
+          <div class="mi-do">→ <b>Do:</b> hand the quotes to sales. They're in the battlecard already.</div>
+        </li>
+        <li>
+          <div class="mi-top"><span class="chip chip-neu">Messaging</span><span class="mi-who">vantage.io — homepage</span></div>
+          <div class="mi-line">Vantage dropped "workflow" and now leads on "agentic". Third rival to do it.</div>
+          <div class="mi-do">→ <b>Watch:</b> category language is shifting. No action yet.</div>
+        </li>
+      </ul>
+      <div class="mail-foot">
+        <span>Quiet nights get no email</span>
+        <span>Read time · 90 sec</span>
+      </div>
+    </div>
+    <div class="notes reveal">
+      <p class="eyebrow">The whole product</p>
+      <h2 class="h2">One brief. Then get on with your day.</h2>
+      <div class="note on">
+        <h3>It reads, so you don't</h3>
+        <p>Full crawl of every rival's site, feed and mentions each night — then it throws away everything that doesn't matter.</p>
+      </div>
+      <div class="note on">
+        <h3>Every item ends in a verb</h3>
+        <p>No chart to interpret. Each move comes with what it means and what to do — and the draft is already written.</p>
+      </div>
+      <div class="note on">
+        <h3>Silence is a feature</h3>
+        <p>Nothing happened? You get nothing. The one competitive tool that isn't trying to earn its seat with noise.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHO IT'S FOR -->
+<section class="shell roles" id="who">
+  <div class="week-head reveal">
+    <p class="eyebrow">Who it's for</p>
+    <h2 class="h2">Built for the person who gets asked the hard question</h2>
+    <p class="lede">
+      RIvals is made for B2B SaaS teams between Series A and C — big enough to have real rivals,
+      small enough that competitive intel is somebody's fourth job.
+    </p>
+  </div>
+  <ul class="role-list reveal">
+    <li class="role-row">
+      <div class="role-who">
+        <div class="job">Product marketing lead</div>
+        <div class="co">Team of 1–3 · owns the narrative</div>
+      </div>
+      <div class="role-q">
+        <div class="role-lab">Gets asked</div>
+        <p>"Why are we losing deals to Halcyon?"</p>
+      </div>
+      <div class="role-a">
+        <div class="role-lab">Gets back</div>
+        <p>Their pricing change, dated. The nineteen people who said they're leaving. The angle that answers both — with the copy already drafted.</p>
+      </div>
+    </li>
+    <li class="role-row">
+      <div class="role-who">
+        <div class="job">Founder / Head of growth</div>
+        <div class="co">Series A–C · in the pricing meeting</div>
+      </div>
+      <div class="role-q">
+        <div class="role-lab">Gets asked</div>
+        <p>"Should we follow them on price?"</p>
+      </div>
+      <div class="role-a">
+        <div class="role-lab">Gets back</div>
+        <p>Every price move across the category with dates, plus what the market said afterwards. A decision with evidence under it, not a hunch.</p>
+      </div>
+    </li>
+    <li class="role-row">
+      <div class="role-who">
+        <div class="job">Sales enablement</div>
+        <div class="co">Arms the floor · lives in the CRM</div>
+      </div>
+      <div class="role-q">
+        <div class="role-lab">Gets asked</div>
+        <p>"I'm on a call in ten minutes. What do I say?"</p>
+      </div>
+      <div class="role-a">
+        <div class="role-lab">Gets back</div>
+        <p>A battlecard that rewrote itself last night: their claim, their weak spot, the objection they'll raise, and the quote that answers it.</p>
+      </div>
+    </li>
+  </ul>
+</section>
+
+<!-- SIGNAL -->
+<section class="signal">
+  <div class="signal-in">
+    <div class="reveal">
+      <p class="eyebrow">Market sentiment</p>
+      <h2>Their customers are already telling you how to win</h2>
+      <p class="lede">
+        Reddit, Hacker News, review sites. RIvals scores every mention from −1 to +1, tags it by
+        what it's about — pricing, support, product, onboarding — and flags the ones that mean money.
+      </p>
+      <div class="kv">
+        <div><div class="n">−0.42</div><div class="l">Halcyon support sentiment</div></div>
+        <div><div class="n">19</div><div class="l">Said they're switching</div></div>
+        <div><div class="n">6</div><div class="l">New signals overnight</div></div>
+      </div>
+    </div>
+    <div class="panel reveal">
+      <div class="panel-bar"><span>Mentions · last 24 hours</span><span>6 new</span></div>
+      <ul class="feed">
+        <li>
+          <div><div class="src">r/sales · 412 upvotes</div><div class="quote">"We left Halcyon after the per-seat jump. Nobody warned us."</div></div>
+          <span class="chip chip-neg">Switching · −0.8</span>
+        </li>
+        <li>
+          <div><div class="src">r/marketing · 88 upvotes</div><div class="quote">"Onboarding took three weeks and two calls."</div></div>
+          <span class="chip chip-neg">Support · −0.6</span>
+        </li>
+        <li>
+          <div><div class="src">Hacker News · 156 points</div><div class="quote">"Northgate's docs are the best I've read this year."</div></div>
+          <span class="chip chip-pos">Product · +0.9</span>
+        </li>
+        <li>
+          <div><div class="src">r/devops · 34 upvotes</div><div class="quote">"Has anyone compared these two on total cost?"</div></div>
+          <span class="chip chip-neu">Comparison</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="shell faq">
+  <div class="week-head reveal">
+    <p class="eyebrow">Fair questions</p>
+    <h2 class="h2">The things you'd ask on the call</h2>
+  </div>
+  <div class="faq-grid reveal">
+    <div class="q">
+      <h3>Is this just scraping?</h3>
+      <p>It reads public pages, public feeds and public forums — the same things you'd read yourself, on a schedule you'd never keep. It respects robots.txt and skips anything gated.</p>
+    </div>
+    <div class="q">
+      <h3>Will it bury me in alerts?</h3>
+      <p>One brief, one time a day, and only when something actually moved. Cosmetic edits and nav changes never reach you.</p>
+    </div>
+    <div class="q">
+      <h3>How long to set up?</h3>
+      <p>Paste one URL per competitor. RIvals finds the sitemap, the feed and the subreddits itself. First brief lands inside the hour.</p>
+    </div>
+    <div class="q">
+      <h3>Does it work with what we use?</h3>
+      <p>Briefs go to email or Slack. Battlecards and comparison matrices export to PDF and slides, so they land where sales already looks.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CLOSE -->
+<section class="cta" id="start">
+  <div class="cta-in">
+    <div class="reveal">
+      <p class="eyebrow">Competitive intelligence, automated</p>
+      <h2>Somebody is already watching you</h2>
+      <p>Add the rival you lose to most. Tomorrow at 7am you'll know what they did last night.</p>
+    </div>
+    <div class="reveal">
+      <div class="cta-actions">
+        <a href="/login" class="btn btn-primary">Open the app</a>
+      </div>
+      <small>First brief in under an hour</small>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="foot-in">
+    <span>© 2026 RIvals — competitive intelligence, automated</span>
+    <nav>
+      <a href="#week">Why</a>
+      <a href="#brief">The brief</a>
+      <a href="#who">Who it's for</a>
+      <a href="/login">Sign in</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(function(){
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('seen'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  document.querySelectorAll('[data-count]').forEach(el => {
+    const target = parseInt(el.dataset.count, 10);
+    let n = 0;
+    const step = Math.max(1, Math.round(target / 20));
+    const id = setInterval(() => {
+      n = Math.min(target, n + step);
+      el.textContent = n;
+      if (n >= target) clearInterval(id);
+    }, 36);
+  });
+
+  const them = document.getElementById('sent-them');
+  const you  = document.getElementById('sent-you');
+  const fmt  = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
+  let t = -0.12, y = 0.41;
+  setInterval(() => {
+    t = Math.max(-0.30, Math.min(0.02, t + (Math.random() - 0.55) * 0.03));
+    y = Math.max( 0.30, Math.min(0.55, y + (Math.random() - 0.45) * 0.02));
+    if (them) them.textContent = fmt(t);
+    if (you)  you.textContent  = fmt(y);
+  }, 2800);
+})();
+</script>
+</body>
+</html>

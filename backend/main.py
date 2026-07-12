@@ -32,7 +32,17 @@ app.include_router(insights.router, prefix="/api/insights", tags=["insights"], d
 
 
 @app.get("/", include_in_schema=False)
-async def index():
+async def home():
+    return FileResponse(os.path.join(_FRONTEND, "home.html"))
+
+
+@app.get("/login", include_in_schema=False)
+async def login():
+    return FileResponse(os.path.join(_FRONTEND, "login.html"))
+
+
+@app.get("/app", include_in_schema=False)
+async def app_page():
     return FileResponse(os.path.join(_FRONTEND, "index.html"))
 
 
