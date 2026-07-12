@@ -12,12 +12,28 @@
     if (name === 'news')        loadNews();
   }
 
+  // ── API key (prompted once, held in memory) ──────────
+  let _apiKey = sessionStorage.getItem('sh_api_key') || '';
+  function ensureApiKey() {
+    if (!_apiKey) {
+      _apiKey = prompt('Enter your StrategyHub API key:') || '';
+      if (_apiKey) sessionStorage.setItem('sh_api_key', _apiKey);
+    }
+    return _apiKey;
+  }
+
   // ── API helpers ──────────────────────────────────────
   async function api(path, options = {}) {
+    const key = ensureApiKey();
     const res = await fetch(path, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(key ? { 'X-API-Key': key } : {}) },
       ...options,
     });
+    if (res.status === 401) {
+      _apiKey = '';
+      sessionStorage.removeItem('sh_api_key');
+      throw new Error('Invalid API key — please reload and try again.');
+    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(err.detail || 'Request failed');

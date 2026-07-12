@@ -1,9 +1,10 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.responses import FileResponse
 
+from .auth import require_api_key
 from .routers import insights, scraper, sources
 from .scheduler import start_scheduler, stop_scheduler
 
@@ -21,9 +22,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="StrategyHub", lifespan=lifespan)
 
-app.include_router(sources.router, prefix="/api/sources", tags=["sources"])
-app.include_router(scraper.router, prefix="/api/scraper", tags=["scraper"])
-app.include_router(insights.router, prefix="/api/insights", tags=["insights"])
+_auth = [Depends(require_api_key)]
+
+app.include_router(sources.router, prefix="/api/sources", tags=["sources"], dependencies=_auth)
+app.include_router(scraper.router, prefix="/api/scraper", tags=["scraper"], dependencies=_auth)
+app.include_router(insights.router, prefix="/api/insights", tags=["insights"], dependencies=_auth)
 
 
 @app.get("/", include_in_schema=False)
