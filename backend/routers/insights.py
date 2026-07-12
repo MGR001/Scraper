@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -80,7 +80,6 @@ async def competitive_comparison():
 async def competitor_changes():
     """Compare the latest scrape session vs the one before it for each competitor."""
     db = get_db()
-    session_window = timedelta(hours=2)  # scrapes within 2h of each other = same session
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
@@ -95,68 +94,47 @@ async def competitor_changes():
 
     results = []
     for src in sources:
-        # Find the absolute latest scraped_at for this source
-        latest_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scraped_content")
-            .select("scraped_at")
+        # Get the two most recent *finished* scrape sessions for this source
+        sessions_res = await asyncio.to_thread(
+            lambda sid=src["id"]: db.table("scrape_sessions")
+            .select("id, started_at, finished_at")
             .eq("source_id", sid)
-            .order("scraped_at", desc=True)
-            .limit(1)
+            .not_.is_("finished_at", "null")
+            .order("started_at", desc=True)
+            .limit(2)
             .execute()
         )
-        if not latest_res.data:
+        sessions = sessions_res.data or []
+
+        if not sessions:
             results.append({
                 "name": src["name"], "url": src["url"],
                 "has_changes": False,
-                "summary": "No scraped content found. Run a scrape first.",
+                "summary": "No scrape sessions found. Run a scrape first.",
                 "changes": [], "stable": [],
                 "latest_scrape": None, "previous_scrape": None,
             })
             continue
 
-        latest_ts = datetime.fromisoformat(
-            latest_res.data[0]["scraped_at"].replace("Z", "+00:00")
-        )
-        latest_session_start = (latest_ts - session_window).isoformat()
+        latest_session = sessions[0]
+        prev_session = sessions[1] if len(sessions) >= 2 else None
 
-        # Fetch content from the latest session
+        # Fetch up to 12 content chunks from the latest session
         recent_res = await asyncio.to_thread(
-            lambda sid=src["id"], s=latest_session_start: db.table("scraped_content")
-            .select("content, scraped_at")
-            .eq("source_id", sid)
-            .gte("scraped_at", s)
-            .order("scraped_at", desc=True)
+            lambda sess_id=latest_session["id"]: db.table("scraped_content")
+            .select("content")
+            .eq("session_id", sess_id)
             .limit(12)
             .execute()
         )
         recent_chunks = [r["content"] for r in (recent_res.data or []) if r.get("content")]
 
-        # Find the latest row BEFORE the current session to anchor the previous session
-        prev_anchor_res = await asyncio.to_thread(
-            lambda sid=src["id"], s=latest_session_start: db.table("scraped_content")
-            .select("scraped_at")
-            .eq("source_id", sid)
-            .lt("scraped_at", s)
-            .order("scraped_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-
         old_chunks: list[str] = []
-        prev_ts: datetime | None = None
-        if prev_anchor_res.data:
-            prev_ts = datetime.fromisoformat(
-                prev_anchor_res.data[0]["scraped_at"].replace("Z", "+00:00")
-            )
-            prev_session_start = (prev_ts - session_window).isoformat()
+        if prev_session:
             old_res = await asyncio.to_thread(
-                lambda sid=src["id"], ps=prev_session_start, pe=latest_session_start:
-                db.table("scraped_content")
-                .select("content, scraped_at")
-                .eq("source_id", sid)
-                .gte("scraped_at", ps)
-                .lt("scraped_at", pe)
-                .order("scraped_at", desc=True)
+                lambda sess_id=prev_session["id"]: db.table("scraped_content")
+                .select("content")
+                .eq("session_id", sess_id)
                 .limit(12)
                 .execute()
             )
@@ -167,8 +145,8 @@ async def competitor_changes():
             "name": src["name"],
             "url": src["url"],
             **change_data,
-            "latest_scrape": latest_ts.isoformat(),
-            "previous_scrape": prev_ts.isoformat() if prev_ts else None,
+            "latest_scrape": latest_session["started_at"],
+            "previous_scrape": prev_session["started_at"] if prev_session else None,
         })
 
     return {

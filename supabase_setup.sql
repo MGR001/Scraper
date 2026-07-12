@@ -21,26 +21,39 @@ create table if not exists sources (
   constraint sources_url_unique unique (url)
 );
 
--- 3. Scraped content (chunked for RAG)
+-- 3. Scrape sessions: one row per crawl/feed-fetch run
+create table if not exists scrape_sessions (
+  id          uuid primary key default gen_random_uuid(),
+  source_id   uuid not null references sources(id) on delete cascade,
+  started_at  timestamptz not null default now(),
+  finished_at timestamptz,
+  pages       integer default 0,
+  new_chunks  integer default 0,
+  errors      integer default 0
+);
+
+-- 4. Scraped content (chunked for RAG)
 create table if not exists scraped_content (
   id           uuid primary key default gen_random_uuid(),
   source_id    uuid not null references sources(id) on delete cascade,
+  session_id   uuid references scrape_sessions(id),
   url          text not null,
   title        text,
   content      text not null,
   content_hash text not null,
   embedding    vector(1536),             -- text-embedding-3-small dimensions
   scraped_at   timestamptz default now(),
+  last_seen_at timestamptz default now(),
   metadata     jsonb not null default '{}'::jsonb,
   constraint scraped_content_hash_unique unique (content_hash)
 );
 
--- 4. IVFFlat index for fast approximate vector search
+-- 5. IVFFlat index for fast approximate vector search
 create index if not exists scraped_content_embedding_idx
   on scraped_content using ivfflat (embedding vector_cosine_ops)
   with (lists = 100);
 
--- 5. Helper function: find the most relevant content chunks for a query embedding
+-- 6. Helper function: find the most relevant content chunks for a query embedding
 create or replace function match_content(
   query_embedding vector(1536),
   match_threshold float default 0.4,
@@ -79,3 +92,17 @@ alter table sources
   add column if not exists sitemap_url          text,
   add column if not exists summary              text,
   add column if not exists summary_generated_at timestamptz;
+
+create table if not exists scrape_sessions (
+  id          uuid primary key default gen_random_uuid(),
+  source_id   uuid not null references sources(id) on delete cascade,
+  started_at  timestamptz not null default now(),
+  finished_at timestamptz,
+  pages       integer default 0,
+  new_chunks  integer default 0,
+  errors      integer default 0
+);
+
+alter table scraped_content
+  add column if not exists session_id   uuid references scrape_sessions(id),
+  add column if not exists last_seen_at timestamptz default now();

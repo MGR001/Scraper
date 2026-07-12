@@ -3,6 +3,7 @@ import hashlib
 import logging
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -193,11 +194,14 @@ async def discover_sitemap_urls(base_url: str, max_urls: int = 50) -> list[str]:
     return all_pages[:max_urls]
 
 
-async def _store_content_chunks(source_id: str, url: str, title: str, content: str) -> int:
+async def _store_content_chunks(
+    source_id: str, url: str, title: str, content: str, session_id: str | None = None
+) -> int:
     """Chunk, embed, and upsert content. Returns number of new chunks stored."""
     chunks = chunk_text(content)
     db = get_db()
     stored = 0
+    now = datetime.now(timezone.utc).isoformat()
 
     for i, chunk in enumerate(chunks):
         content_hash = hashlib.sha256(chunk.encode()).hexdigest()
@@ -209,6 +213,18 @@ async def _store_content_chunks(source_id: str, url: str, title: str, content: s
             .execute()
         )
         if existing.data:
+            # Update last_seen_at and session_id so change-detection stays accurate
+            try:
+                update_data: dict = {"last_seen_at": now}
+                if session_id:
+                    update_data["session_id"] = session_id
+                row_id = existing.data[0]["id"]
+                await asyncio.to_thread(
+                    lambda rid=row_id, ud=update_data:
+                    db.table("scraped_content").update(ud).eq("id", rid).execute()
+                )
+            except Exception as exc:
+                logger.warning("Could not update last_seen_at for chunk %d of %s: %s", i, url, exc)
             continue
 
         try:
@@ -224,12 +240,15 @@ async def _store_content_chunks(source_id: str, url: str, title: str, content: s
             "content": chunk,
             "content_hash": content_hash,
             "embedding": embedding,
+            "last_seen_at": now,
             "metadata": {
                 "chunk_index": i,
                 "total_chunks": len(chunks),
                 "char_count": len(chunk),
             },
         }
+        if session_id:
+            record["session_id"] = session_id
         try:
             await asyncio.to_thread(
                 lambda r=record: db.table("scraped_content").insert(r).execute()
@@ -311,9 +330,8 @@ def _parse_feed_xml(xml_text: str) -> list[dict]:
     return articles
 
 
-async def _scrape_feed(source_id: str, feed_url: str) -> dict:
+async def _scrape_feed(source_id: str, feed_url: str, session_id: str | None = None) -> dict:
     """Fetch an RSS/Atom feed and store each article as content chunks."""
-    from datetime import datetime, timezone
     from ..scrape_status import set_status
 
     set_status(source_id, "running", "Fetching feed…")
@@ -336,7 +354,8 @@ async def _scrape_feed(source_id: str, feed_url: str) -> dict:
                    f"Article {i}/{len(articles)} · {article['url'][:60]}")
         try:
             new = await _store_content_chunks(
-                source_id, article["url"], article["title"], article["content"]
+                source_id, article["url"], article["title"], article["content"],
+                session_id=session_id,
             )
             total_new += new
         except Exception as exc:
@@ -365,83 +384,117 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50) -> d
       3. Falls back to base URL only if no sitemap exists.
     Stops when max_pages is reached.
     """
-    from datetime import datetime, timezone
     from ..scrape_status import set_status
+
+    db = get_db()
+
+    # ── Create scrape session ─────────────────────────────────────────────────
+    session_row = await asyncio.to_thread(
+        lambda: db.table("scrape_sessions").insert({
+            "source_id": source_id,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+    )
+    session_id: str | None = (session_row.data[0]["id"] if session_row.data else None)
 
     # Fast path: URL is explicitly a feed (RSS/Atom)
     if _is_feed_url(base_url):
-        return await _scrape_feed(source_id, base_url)
+        result = await _scrape_feed(source_id, base_url, session_id=session_id)
+        if session_id:
+            await asyncio.to_thread(
+                lambda: db.table("scrape_sessions").update({
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "pages": result["pages"],
+                    "new_chunks": result["new_chunks"],
+                    "errors": result["errors"],
+                }).eq("id", session_id).execute()
+            )
+        return result
 
     logger.info("Starting crawl for %s (max %d pages)", base_url, max_pages)
     base_parsed = urlparse(base_url)
-    db = get_db()
     set_status(source_id, "running", "Discovering sitemap…")
 
-    # ── Step 1: Sitemap seeds ─────────────────────────────────────────────────
-    sitemap_urls = await discover_sitemap_urls(base_url, max_urls=max_pages)
-    sitemap_found = len(sitemap_urls) > 0
-
-    if sitemap_found:
-        origin = f"{base_parsed.scheme}://{base_parsed.netloc}"
-        await asyncio.to_thread(
-            lambda: db.table("sources")
-            .update({"sitemap_url": f"{origin}/sitemap.xml"})
-            .eq("id", source_id)
-            .execute()
-        )
-        logger.info("Sitemap: %d seed URLs", len(sitemap_urls))
-        seeds = sitemap_urls
-        set_status(source_id, "running", f"Sitemap found — {len(sitemap_urls)} pages queued")
-    else:
-        logger.info("No sitemap — BFS from base URL")
-        seeds = [base_url]
-        set_status(source_id, "running", "No sitemap — crawling from base URL")
-
-    # ── Step 2: BFS crawl ─────────────────────────────────────────────────────
-    visited: set[str] = set(seeds)
-    queue: list[str] = list(seeds)
     total_stored = 0
     errors = 0
     pages_crawled = 0
 
-    while queue and pages_crawled < max_pages:
-        url = queue.pop(0)
-        logger.info("[%d/%d] Crawling %s", pages_crawled + 1, max_pages, url)
+    try:
+        # ── Step 1: Sitemap seeds ─────────────────────────────────────────────
+        sitemap_urls = await discover_sitemap_urls(base_url, max_urls=max_pages)
+        sitemap_found = len(sitemap_urls) > 0
 
-        try:
-            html = await fetch_page(url)
+        if sitemap_found:
+            origin = f"{base_parsed.scheme}://{base_parsed.netloc}"
+            await asyncio.to_thread(
+                lambda: db.table("sources")
+                .update({"sitemap_url": f"{origin}/sitemap.xml"})
+                .eq("id", source_id)
+                .execute()
+            )
+            logger.info("Sitemap: %d seed URLs", len(sitemap_urls))
+            seeds = sitemap_urls
+            set_status(source_id, "running", f"Sitemap found — {len(sitemap_urls)} pages queued")
+        else:
+            logger.info("No sitemap — BFS from base URL")
+            seeds = [base_url]
+            set_status(source_id, "running", "No sitemap — crawling from base URL")
 
-            # Enqueue new same-domain links discovered on this page
-            for link in extract_links(html, url):
-                if (
-                    link not in visited
-                    and urlparse(link).netloc == base_parsed.netloc
-                    and len(visited) < max_pages
-                ):
-                    visited.add(link)
-                    queue.append(link)
+        # ── Step 2: BFS crawl ─────────────────────────────────────────────────
+        visited: set[str] = set(seeds)
+        queue: list[str] = list(seeds)
 
-            title, content = extract_content(html)
-            if len(content) >= 50:
-                stored = await _store_content_chunks(source_id, url, title, content)
-                total_stored += stored
+        while queue and pages_crawled < max_pages:
+            url = queue.pop(0)
+            logger.info("[%d/%d] Crawling %s", pages_crawled + 1, max_pages, url)
 
-            pages_crawled += 1
-            set_status(source_id, "running",
-                       f"Page {pages_crawled}/{max(len(visited), pages_crawled)} · {url[:70]}")
-            await asyncio.sleep(0.5)  # polite crawl delay
+            try:
+                html = await fetch_page(url)
 
-        except Exception as exc:
-            logger.error("Crawl error at %s: %s", url, exc)
-            errors += 1
+                # Enqueue new same-domain links discovered on this page
+                for link in extract_links(html, url):
+                    if (
+                        link not in visited
+                        and urlparse(link).netloc == base_parsed.netloc
+                        and len(visited) < max_pages
+                    ):
+                        visited.add(link)
+                        queue.append(link)
 
-    # ── Step 3: Update last_scraped_at ────────────────────────────────────────
-    await asyncio.to_thread(
-        lambda: db.table("sources")
-        .update({"last_scraped_at": datetime.now(timezone.utc).isoformat()})
-        .eq("id", source_id)
-        .execute()
-    )
+                title, content = extract_content(html)
+                if len(content) >= 50:
+                    stored = await _store_content_chunks(
+                        source_id, url, title, content, session_id=session_id
+                    )
+                    total_stored += stored
+
+                pages_crawled += 1
+                set_status(source_id, "running",
+                           f"Page {pages_crawled}/{max(len(visited), pages_crawled)} · {url[:70]}")
+                await asyncio.sleep(0.5)  # polite crawl delay
+
+            except Exception as exc:
+                logger.error("Crawl error at %s: %s", url, exc)
+                errors += 1
+
+    finally:
+        # ── Step 3: Finalise session & source timestamp ───────────────────────
+        now = datetime.now(timezone.utc).isoformat()
+        await asyncio.to_thread(
+            lambda: db.table("sources")
+            .update({"last_scraped_at": now})
+            .eq("id", source_id)
+            .execute()
+        )
+        if session_id:
+            await asyncio.to_thread(
+                lambda: db.table("scrape_sessions").update({
+                    "finished_at": now,
+                    "pages": pages_crawled,
+                    "new_chunks": total_stored,
+                    "errors": errors,
+                }).eq("id", session_id).execute()
+            )
 
     summary = {
         "urls_found": len(visited),
@@ -461,8 +514,6 @@ async def scrape_and_store(source_id: str, url: str) -> int:
     Scrape a single URL, chunk + embed, store in Supabase.
     Returns the number of new chunks stored.
     """
-    from datetime import datetime, timezone
-
     html = await fetch_page(url)
     title, content = extract_content(html)
 
