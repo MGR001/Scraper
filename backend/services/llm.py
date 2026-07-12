@@ -29,7 +29,7 @@ async def get_relevant_context(question: str, top_k: int = 8) -> list[dict]:
                 "match_content",
                 {
                     "query_embedding": embedding,
-                    "match_threshold": 0.1,
+                    "match_threshold": settings.match_threshold,
                     "match_count": top_k,
                 },
             ).execute()

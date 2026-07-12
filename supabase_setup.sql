@@ -112,3 +112,12 @@ alter table scraped_content
   drop constraint if exists scraped_content_hash_unique;
 create unique index if not exists scraped_content_source_hash_unique
   on scraped_content (source_id, content_hash);
+
+-- source_stats(): per-source page and chunk counts (Task 11)
+create or replace function source_stats()
+returns table (source_id uuid, pages bigint, chunks bigint)
+language sql stable as $$
+  select source_id, count(distinct url), count(*)
+  from scraped_content
+  group by source_id;
+$$;

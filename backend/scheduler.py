@@ -34,8 +34,8 @@ async def _check_and_scrape() -> None:
 
         if due:
             try:
-                result = await scrape_source(source["id"], source["url"])
-                logger.info("Scheduler scraped '%s': %s", source["name"], result)
+                outcome = await scrape_source(source["id"], source["url"])
+                logger.info("Scheduler scraped '%s': %s", source["name"], outcome)
             except Exception as exc:
                 logger.error("Scheduler scrape failed for %s: %s", source["url"], exc)
 
@@ -43,7 +43,12 @@ async def _check_and_scrape() -> None:
 async def _loop() -> None:
     """Hourly background loop."""
     while True:
-        await _check_and_scrape()
+        try:
+            await _check_and_scrape()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error("Scheduler loop error (will retry next cycle): %s", exc)
         await asyncio.sleep(3600)
 
 
@@ -53,8 +58,19 @@ def start_scheduler() -> None:
     logger.info("Background scheduler started.")
 
 
-def stop_scheduler() -> None:
+async def _stop_scheduler_async() -> None:
     global _task
     if _task:
         _task.cancel()
+        try:
+            await _task
+        except asyncio.CancelledError:
+            pass
+        _task = None
         logger.info("Background scheduler stopped.")
+
+
+def stop_scheduler() -> None:
+    global _task
+    if _task:
+        asyncio.ensure_future(_stop_scheduler_async())

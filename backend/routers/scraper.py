@@ -21,6 +21,19 @@ async def run_scrape(source_id: str, background_tasks: BackgroundTasks):
     if not result.data:
         raise HTTPException(404, "Source not found.")
     source = result.data[0]
+
+    from ..scrape_status import get_status
+    status = get_status(source_id)
+    if status.get("state") == "running":
+        from datetime import datetime, timezone, timedelta
+        updated = status.get("updated_at")
+        stale = True
+        if updated:
+            age = datetime.now(timezone.utc) - datetime.fromisoformat(updated)
+            stale = age > timedelta(minutes=30)
+        if not stale:
+            raise HTTPException(409, "A scrape is already running for this source.")
+
     background_tasks.add_task(scrape_source, source_id, source["url"])
     return {"message": f"Scrape started for '{source['name']}'. Checking sitemap…"}
 

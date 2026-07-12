@@ -18,6 +18,8 @@ async def lifespan(app: FastAPI):
     start_scheduler()
     yield
     stop_scheduler()
+    from .services.scraper import close_http_client
+    await close_http_client()
 
 
 app = FastAPI(title="StrategyHub", lifespan=lifespan)

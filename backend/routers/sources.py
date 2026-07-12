@@ -17,34 +17,19 @@ async def list_sources():
         lambda: db.table("sources").select("*").order("created_at", desc=True).execute()
     )
 
-    # Paginate through all scraped_content rows to count chunks + unique pages
-    # (Supabase default cap is 1000 rows — we must paginate for accuracy)
-    from collections import defaultdict
-    url_sets: dict[str, set] = defaultdict(set)
-    chunks_map: dict[str, int] = defaultdict(int)
-    batch = 1000
-    offset = 0
-    while True:
-        rows = await asyncio.to_thread(
-            lambda o=offset: db.table("scraped_content")
-            .select("source_id, url")
-            .range(o, o + batch - 1)
-            .execute()
-        )
-        data = rows.data or []
-        for row in data:
-            sid = row["source_id"]
-            url_sets[sid].add(row["url"])
-            chunks_map[sid] += 1
-        if len(data) < batch:
-            break
-        offset += batch
+    stats_result = await asyncio.to_thread(
+        lambda: db.rpc("source_stats").execute()
+    )
+    stats_map: dict[str, dict] = {
+        row["source_id"]: row for row in (stats_result.data or [])
+    }
 
     enriched = []
     for s in sources.data:
         sid = s["id"]
-        s["pages_scraped"] = len(url_sets.get(sid, set()))
-        s["chunks_stored"] = chunks_map.get(sid, 0)
+        row = stats_map.get(sid, {})
+        s["pages_scraped"] = row.get("pages", 0)
+        s["chunks_stored"] = row.get("chunks", 0)
         enriched.append(s)
 
     return enriched
@@ -96,7 +81,12 @@ class UrlAdd(_PydanticBase):
 @router.post("/{source_id}/add-url")
 async def add_url_to_source(source_id: str, body: UrlAdd):
     """Fetch a specific URL and embed its content into this source."""
-    from ..services.scraper import fetch_page, extract_content, _store_content_chunks
+    from ..services.scraper import fetch_page, extract_content, _store_content_chunks, validate_url
+
+    try:
+        validate_url(body.url)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
     db = get_db()
     src = await asyncio.to_thread(

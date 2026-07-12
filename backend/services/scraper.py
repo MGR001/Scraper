@@ -1,7 +1,10 @@
 import asyncio
 import hashlib
+import ipaddress
 import logging
 import re
+import socket
+import urllib.robotparser
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
@@ -24,14 +27,60 @@ _HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+# Shared HTTP client (Task 13) — lazy-initialised, closed in lifespan shutdown
+_http_client: httpx.AsyncClient | None = None
+
+
+def get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(
+            follow_redirects=True, headers=_HEADERS, timeout=30
+        )
+    return _http_client
+
+
+async def close_http_client() -> None:
+    global _http_client
+    if _http_client and not _http_client.is_closed:
+        await _http_client.aclose()
+        _http_client = None
+
+
+def validate_url(url: str) -> None:
+    """Raise ValueError if the URL could be an SSRF vector."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"URL scheme '{parsed.scheme}' is not allowed; use http or https.")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL has no hostname.")
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as exc:
+        raise ValueError(f"Could not resolve hostname '{hostname}': {exc}")
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+        ):
+            raise ValueError(
+                f"URL resolves to a non-public address ({ip}) and is not allowed."
+            )
+
 
 async def fetch_page(url: str, timeout: int = 30) -> str:
-    async with httpx.AsyncClient(
-        timeout=timeout, follow_redirects=True, headers=_HEADERS
-    ) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        return response.text
+    response = await get_http_client().get(url, timeout=timeout)
+    response.raise_for_status()
+    return response.text
 
 
 def extract_content(html: str) -> tuple[str, str]:
@@ -115,10 +164,9 @@ def extract_links(html: str, base_url: str) -> list[str]:
 async def _fetch_text(url: str, timeout: int = 10) -> str | None:
     """Fetch raw text from a URL, returning None on any error."""
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers=_HEADERS) as client:
-            r = await client.get(url)
-            if r.status_code == 200:
-                return r.text
+        r = await get_http_client().get(url, timeout=timeout)
+        if r.status_code == 200:
+            return r.text
     except Exception:
         pass
     return None
@@ -203,60 +251,76 @@ async def _store_content_chunks(
     stored = 0
     now = datetime.now(timezone.utc).isoformat()
 
-    for i, chunk in enumerate(chunks):
-        content_hash = hashlib.sha256(chunk.encode()).hexdigest()
+    # ── Batch existence check (Task 10) ──────────────────────────────────────
+    all_hashes = [hashlib.sha256(c.encode()).hexdigest() for c in chunks]
+    existing_rows = await asyncio.to_thread(
+        lambda: db.table("scraped_content")
+        .select("id, content_hash")
+        .eq("source_id", source_id)
+        .in_("content_hash", all_hashes)
+        .execute()
+    )
+    existing_map: dict[str, str] = {
+        row["content_hash"]: row["id"] for row in (existing_rows.data or [])
+    }
 
-        existing = await asyncio.to_thread(
-            lambda h=content_hash: db.table("scraped_content")
-            .select("id")
-            .eq("source_id", source_id)
-            .eq("content_hash", h)
-            .execute()
-        )
-        if existing.data:
-            # Update last_seen_at and session_id so change-detection stays accurate
-            try:
-                update_data: dict = {"last_seen_at": now}
-                if session_id:
-                    update_data["session_id"] = session_id
-                row_id = existing.data[0]["id"]
-                await asyncio.to_thread(
-                    lambda rid=row_id, ud=update_data:
-                    db.table("scraped_content").update(ud).eq("id", rid).execute()
-                )
-            except Exception as exc:
-                logger.warning("Could not update last_seen_at for chunk %d of %s: %s", i, url, exc)
-            continue
-
-        try:
-            embedding = await get_embedding(chunk)
-        except Exception as exc:
-            logger.error("Embedding failed for chunk %d of %s: %s", i, url, exc)
-            continue
-
-        record = {
-            "source_id": source_id,
-            "url": url,
-            "title": title if i == 0 else f"{title} (part {i + 1})",
-            "content": chunk,
-            "content_hash": content_hash,
-            "embedding": embedding,
-            "last_seen_at": now,
-            "metadata": {
-                "chunk_index": i,
-                "total_chunks": len(chunks),
-                "char_count": len(chunk),
-            },
-        }
-        if session_id:
-            record["session_id"] = session_id
+    # Bulk-update last_seen_at for existing chunks
+    update_payload: dict = {"last_seen_at": now}
+    if session_id:
+        update_payload["session_id"] = session_id
+    for row_id in existing_map.values():
         try:
             await asyncio.to_thread(
-                lambda r=record: db.table("scraped_content").insert(r).execute()
+                lambda rid=row_id: db.table("scraped_content")
+                .update(update_payload)
+                .eq("id", rid)
+                .execute()
             )
-            stored += 1
         except Exception as exc:
-            logger.error("DB insert failed for %s chunk %d: %s", url, i, exc)
+            logger.warning("Could not update last_seen_at for chunk in %s: %s", url, exc)
+
+    # Insert only new chunks
+    semaphore = asyncio.Semaphore(5)
+
+    async def _embed_and_insert(i: int, chunk: str, content_hash: str) -> None:
+        nonlocal stored
+        async with semaphore:
+            try:
+                embedding = await get_embedding(chunk)
+            except Exception as exc:
+                logger.error("Embedding failed for chunk %d of %s: %s", i, url, exc)
+                return
+            record = {
+                "source_id": source_id,
+                "url": url,
+                "title": title if i == 0 else f"{title} (part {i + 1})",
+                "content": chunk,
+                "content_hash": content_hash,
+                "embedding": embedding,
+                "last_seen_at": now,
+                "metadata": {
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    "char_count": len(chunk),
+                },
+            }
+            if session_id:
+                record["session_id"] = session_id
+            try:
+                await asyncio.to_thread(
+                    lambda r=record: db.table("scraped_content").insert(r).execute()
+                )
+                stored += 1
+            except Exception as exc:
+                logger.error("DB insert failed for %s chunk %d: %s", url, i, exc)
+
+    tasks = [
+        _embed_and_insert(i, chunk, h)
+        for i, (chunk, h) in enumerate(zip(chunks, all_hashes))
+        if h not in existing_map
+    ]
+    if tasks:
+        await asyncio.gather(*tasks)
 
     return stored
 
@@ -264,8 +328,10 @@ async def _store_content_chunks(
 # ── Feed support ──────────────────────────────────────────────────────────────
 
 def _is_feed_url(url: str) -> bool:
-    """Return True if the URL looks like an RSS/Atom feed."""
+    """Return True if the URL looks like an RSS/Atom feed (not a sitemap)."""
     path = urlparse(url).path.lower().rstrip("/")
+    if "sitemap" in path:
+        return False
     return (
         path.endswith("/feed")
         or path.endswith("/rss")
@@ -385,15 +451,33 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50) -> d
       3. Falls back to base URL only if no sitemap exists.
     Stops when max_pages is reached.
     """
-    from ..scrape_status import set_status
+    from ..scrape_status import get_status, set_status
+
+    try:
+        validate_url(base_url)
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+
+    # ── Concurrency guard (Task 9) ────────────────────────────────────────────
+    current = get_status(source_id)
+    if current.get("state") == "running":
+        updated = current.get("updated_at")
+        stale = True
+        if updated:
+            from datetime import timedelta
+            age = datetime.now(timezone.utc) - datetime.fromisoformat(updated)
+            stale = age > timedelta(minutes=30)
+        if not stale:
+            return {"skipped": True, "reason": "already running"}
 
     db = get_db()
 
     # ── Create scrape session ─────────────────────────────────────────────────
+    session_started_at = datetime.now(timezone.utc).isoformat()
     session_row = await asyncio.to_thread(
         lambda: db.table("scrape_sessions").insert({
             "source_id": source_id,
-            "started_at": datetime.now(timezone.utc).isoformat(),
+            "started_at": session_started_at,
         }).execute()
     )
     session_id: str | None = (session_row.data[0]["id"] if session_row.data else None)
@@ -419,6 +503,9 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50) -> d
     total_stored = 0
     errors = 0
     pages_crawled = 0
+    _crawl_failed = False
+    visited: set[str] = set()
+    skipped_robots = 0
 
     try:
         # ── Step 1: Sitemap seeds ─────────────────────────────────────────────
@@ -441,12 +528,29 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50) -> d
             seeds = [base_url]
             set_status(source_id, "running", "No sitemap — crawling from base URL")
 
+        # ── Step 1b: Parse robots.txt (Task 12) ──────────────────────────────
+        origin = f"{base_parsed.scheme}://{base_parsed.netloc}"
+        robots_txt = await _fetch_text(f"{origin}/robots.txt")
+        rp = urllib.robotparser.RobotFileParser()
+        rp.parse((robots_txt or "").splitlines())
+        _ua = _HEADERS["User-Agent"]
+        skipped_robots = 0
+
+        def _robots_allowed(u: str) -> bool:
+            return rp.can_fetch(_ua, u) or rp.can_fetch("*", u)
+
         # ── Step 2: BFS crawl ─────────────────────────────────────────────────
-        visited: set[str] = set(seeds)
+        visited = set(seeds)
         queue: list[str] = list(seeds)
 
         while queue and pages_crawled < max_pages:
             url = queue.pop(0)
+
+            if not _robots_allowed(url):
+                skipped_robots += 1
+                logger.debug("robots.txt disallows %s — skipping", url)
+                continue
+
             logger.info("[%d/%d] Crawling %s", pages_crawled + 1, max_pages, url)
 
             try:
@@ -478,6 +582,11 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50) -> d
                 logger.error("Crawl error at %s: %s", url, exc)
                 errors += 1
 
+    except Exception as _outer_exc:
+        _crawl_failed = True
+        set_status(source_id, "error", str(_outer_exc))
+        raise
+
     finally:
         # ── Step 3: Finalise session & source timestamp ───────────────────────
         now = datetime.now(timezone.utc).isoformat()
@@ -496,12 +605,28 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50) -> d
                     "errors": errors,
                 }).eq("id", session_id).execute()
             )
+        # ── Step 4: Expire stale chunks (Task 7) ─────────────────────────────
+        if pages_crawled > 0:
+            error_rate = errors / pages_crawled
+            if error_rate < 0.20:
+                try:
+                    await asyncio.to_thread(
+                        lambda: db.table("scraped_content")
+                        .delete()
+                        .eq("source_id", source_id)
+                        .lt("last_seen_at", session_started_at)
+                        .execute()
+                    )
+                    logger.info("Expired stale chunks for source %s", source_id)
+                except Exception as _exc:
+                    logger.warning("Could not expire stale chunks: %s", _exc)
 
     summary = {
         "urls_found": len(visited),
         "urls_scraped": pages_crawled,
         "chunks_stored": total_stored,
         "errors": errors,
+        "skipped_robots": skipped_robots,
     }
     logger.info("Crawl complete for %s: %s", base_url, summary)
     set_status(source_id, "completed",
