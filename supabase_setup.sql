@@ -45,7 +45,7 @@ create table if not exists scraped_content (
   scraped_at   timestamptz default now(),
   last_seen_at timestamptz default now(),
   metadata     jsonb not null default '{}'::jsonb,
-  constraint scraped_content_hash_unique unique (content_hash)
+  constraint scraped_content_source_hash_unique unique (source_id, content_hash)
 );
 
 -- 5. IVFFlat index for fast approximate vector search
@@ -106,3 +106,9 @@ create table if not exists scrape_sessions (
 alter table scraped_content
   add column if not exists session_id   uuid references scrape_sessions(id),
   add column if not exists last_seen_at timestamptz default now();
+
+-- Drop the old global unique constraint and replace with per-source dedup
+alter table scraped_content
+  drop constraint if exists scraped_content_hash_unique;
+create unique index if not exists scraped_content_source_hash_unique
+  on scraped_content (source_id, content_hash);

@@ -209,6 +209,7 @@ async def _store_content_chunks(
         existing = await asyncio.to_thread(
             lambda h=content_hash: db.table("scraped_content")
             .select("id")
+            .eq("source_id", source_id)
             .eq("content_hash", h)
             .execute()
         )
