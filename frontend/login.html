@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
 <style>
 :root{
@@ -155,38 +156,122 @@ footer a:hover{ color:var(--ink) }
 
 <main>
   <div class="card">
-    <div class="card-top">
-      <div class="card-brand">RIvals · Competitive Intelligence</div>
-      <div class="card-title">Sign in to your workspace</div>
-      <div class="card-sub">Enter your API key to continue</div>
-    </div>
-    <div class="card-body">
-      <form id="login-form" onsubmit="handleLogin(event)" autocomplete="off">
-        <label for="api-key">API Key</label>
-        <div class="input-wrap">
-          <input type="password" id="api-key" name="api-key"
-            placeholder="sk-••••••••••••••••••••"
-            autocomplete="current-password" spellcheck="false" required />
-          <button type="button" class="toggle-vis" aria-label="Show/hide key" onclick="toggleVis()">
-            <svg id="eye-icon" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-              <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-            </svg>
+    <!-- SIGN IN -->
+    <div id="view-signin">
+      <div class="card-top">
+        <div class="card-brand">RIvals · Competitive Intelligence</div>
+        <div class="card-title">Sign in to your workspace</div>
+      </div>
+      <div class="card-body">
+        <form id="form-signin" onsubmit="handleSignin(event)" autocomplete="on">
+          <label for="si-email">Email</label>
+          <input type="email" id="si-email" placeholder="you@company.com" required autocomplete="email"/>
+          <label for="si-pw" style="margin-top:.9rem">Password</label>
+          <div class="input-wrap">
+            <input type="password" id="si-pw" placeholder="••••••••" required autocomplete="current-password"/>
+            <button type="button" class="toggle-vis" onclick="toggleVis('si-pw')">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            </button>
+          </div>
+          <div style="text-align:right;margin-top:.4rem">
+            <a href="#" onclick="show('forgot')" style="font-size:.82rem;color:var(--you)">Forgot password?</a>
+          </div>
+          <div id="msg-signin" class="msg"></div>
+          <button type="submit" class="btn-submit" id="btn-signin">
+            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+            Sign in
           </button>
-        </div>
-        <p class="hint">
-          Set <code>API_AUTH_KEY</code> in your <code>.env</code> file.
-          Leave the field blank if auth is disabled.
+        </form>
+        <p style="text-align:center;font-size:.85rem;color:var(--muted);margin-top:1.1rem">
+          No account? <a href="#" onclick="show('register')" style="color:var(--you)">Create one</a>
         </p>
-
-        <div id="msg" class="msg"></div>
-
-        <button type="submit" class="btn-submit" id="submit-btn">
-          <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-          Sign in
-        </button>
-      </form>
+      </div>
     </div>
+
+    <!-- REGISTER -->
+    <div id="view-register" style="display:none">
+      <div class="card-top">
+        <div class="card-brand">RIvals · New account</div>
+        <div class="card-title">Create your account</div>
+      </div>
+      <div class="card-body">
+        <form id="form-register" onsubmit="handleRegister(event)" autocomplete="on">
+          <label for="reg-name">Full name</label>
+          <input type="text" id="reg-name" placeholder="Jane Smith" required autocomplete="name"/>
+          <label for="reg-email" style="margin-top:.9rem">Email</label>
+          <input type="email" id="reg-email" placeholder="you@company.com" required autocomplete="email"/>
+          <label for="reg-pw" style="margin-top:.9rem">Password <span style="color:var(--muted);font-size:.78rem">(min 8 chars)</span></label>
+          <div class="input-wrap">
+            <input type="password" id="reg-pw" placeholder="••••••••" required minlength="8" autocomplete="new-password"/>
+            <button type="button" class="toggle-vis" onclick="toggleVis('reg-pw')">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            </button>
+          </div>
+          <label for="reg-pw2" style="margin-top:.9rem">Confirm password</label>
+          <input type="password" id="reg-pw2" placeholder="••••••••" required minlength="8" autocomplete="new-password"/>
+          <div id="msg-register" class="msg"></div>
+          <button type="submit" class="btn-submit" id="btn-register">Create account</button>
+        </form>
+        <p style="text-align:center;font-size:.85rem;color:var(--muted);margin-top:1.1rem">
+          Already have one? <a href="#" onclick="show('signin')" style="color:var(--you)">Sign in</a>
+        </p>
+      </div>
+    </div>
+
+    <!-- FORGOT PASSWORD -->
+    <div id="view-forgot" style="display:none">
+      <div class="card-top">
+        <div class="card-brand">RIvals · Reset password</div>
+        <div class="card-title">Reset your password</div>
+        <div class="card-sub">We'll send a link to your inbox.</div>
+      </div>
+      <div class="card-body">
+        <form id="form-forgot" onsubmit="handleForgot(event)">
+          <label for="fp-email">Email</label>
+          <input type="email" id="fp-email" placeholder="you@company.com" required autocomplete="email"/>
+          <div id="msg-forgot" class="msg"></div>
+          <button type="submit" class="btn-submit" id="btn-forgot">Send reset link</button>
+        </form>
+        <p style="text-align:center;font-size:.85rem;color:var(--muted);margin-top:1.1rem">
+          <a href="#" onclick="show('signin')" style="color:var(--you)">← Back to sign in</a>
+        </p>
+      </div>
+    </div>
+
+    <!-- RESET PASSWORD (landed here from email link) -->
+    <div id="view-reset" style="display:none">
+      <div class="card-top">
+        <div class="card-brand">RIvals · New password</div>
+        <div class="card-title">Set a new password</div>
+      </div>
+      <div class="card-body">
+        <form id="form-reset" onsubmit="handleReset(event)">
+          <label for="rp-pw">New password <span style="color:var(--muted);font-size:.78rem">(min 8 chars)</span></label>
+          <div class="input-wrap">
+            <input type="password" id="rp-pw" placeholder="••••••••" required minlength="8" autocomplete="new-password"/>
+            <button type="button" class="toggle-vis" onclick="toggleVis('rp-pw')">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            </button>
+          </div>
+          <div id="msg-reset" class="msg"></div>
+          <button type="submit" class="btn-submit" id="btn-reset">Set new password</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- CONFIRM EMAIL STATE -->
+    <div id="view-confirm" style="display:none">
+      <div class="card-top" style="background:var(--you-wash)">
+        <div class="card-brand">RIvals · Almost there</div>
+        <div class="card-title">Check your inbox</div>
+        <div class="card-sub" id="confirm-email-note">We sent a confirmation link to your email.</div>
+      </div>
+      <div class="card-body" style="text-align:center;padding-top:1.5rem">
+        <p style="font-size:.9rem;color:var(--muted)">Click the link in the email to activate your account, then come back here to sign in.</p>
+        <a href="#" onclick="show('signin')" style="display:inline-block;margin-top:1.25rem;font-size:.9rem;color:var(--you)">← Back to sign in</a>
+      </div>
+    </div>
+
   </div>
 </main>
 
@@ -195,48 +280,119 @@ footer a:hover{ color:var(--ink) }
 </footer>
 
 <script>
-function toggleVis() {
-  const inp = document.getElementById('api-key');
+let _supabase = null;
+
+async function initSupabase() {
+  const res = await fetch('/api/config');
+  const cfg = await res.json();
+  _supabase = supabase.createClient(cfg.supabase_url, cfg.supabase_anon_key);
+
+  // Handle redirect from password-reset email
+  const hash = window.location.hash;
+  if (hash.includes('type=recovery')) {
+    show('reset');
+    return;
+  }
+
+  // Already signed in?
+  const { data: { session } } = await _supabase.auth.getSession();
+  if (session) {
+    window.location.replace('/app');
+  }
+
+  _supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      window.location.replace('/app');
+    }
+    if (event === 'PASSWORD_RECOVERY') {
+      show('reset');
+    }
+  });
+}
+
+function show(view) {
+  ['signin','register','forgot','reset','confirm'].forEach(v =>
+    document.getElementById('view-' + v).style.display = v === view ? '' : 'none'
+  );
+}
+
+function toggleVis(id) {
+  const inp = document.getElementById(id);
   inp.type = inp.type === 'password' ? 'text' : 'password';
 }
 
-async function handleLogin(e) {
-  e.preventDefault();
-  const key   = document.getElementById('api-key').value.trim();
-  const btn   = document.getElementById('submit-btn');
-  const msg   = document.getElementById('msg');
-
-  msg.className = 'msg';
-  msg.textContent = '';
-  btn.disabled = true;
-  btn.textContent = 'Checking…';
-
-  try {
-    const res = await fetch('/api/sources/', {
-      headers: { 'X-API-Key': key, 'Content-Type': 'application/json' }
-    });
-
-    if (res.status === 401) {
-      msg.className = 'msg error';
-      msg.textContent = 'Invalid API key — check your .env file and try again.';
-      btn.disabled = false;
-      btn.innerHTML = '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg> Sign in';
-      return;
-    }
-
-    // Key works (or auth is disabled)
-    sessionStorage.setItem('sh_api_key', key);
-    msg.className = 'msg ok';
-    msg.textContent = 'Verified — opening your workspace…';
-    setTimeout(() => { window.location.href = '/app'; }, 600);
-
-  } catch (err) {
-    msg.className = 'msg error';
-    msg.textContent = 'Could not reach the server. Is it running?';
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg> Sign in';
-  }
+function setMsg(id, text, type) {
+  const el = document.getElementById('msg-' + id);
+  el.textContent = text;
+  el.className = 'msg ' + (type || '');
 }
+
+function setBusy(btnId, busy, label) {
+  const btn = document.getElementById(btnId);
+  btn.disabled = busy;
+  if (!busy) btn.textContent = label;
+  else btn.textContent = 'Please wait…';
+}
+
+async function handleSignin(e) {
+  e.preventDefault();
+  const email = document.getElementById('si-email').value.trim();
+  const pw    = document.getElementById('si-pw').value;
+  setMsg('signin', '', '');
+  setBusy('btn-signin', true);
+  const { error } = await _supabase.auth.signInWithPassword({ email, password: pw });
+  setBusy('btn-signin', false, 'Sign in');
+  if (error) { setMsg('signin', error.message, 'error'); return; }
+  // onAuthStateChange will redirect
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  const name  = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const pw    = document.getElementById('reg-pw').value;
+  const pw2   = document.getElementById('reg-pw2').value;
+  setMsg('register', '', '');
+  if (pw !== pw2) { setMsg('register', 'Passwords do not match.', 'error'); return; }
+  if (pw.length < 8) { setMsg('register', 'Password must be at least 8 characters.', 'error'); return; }
+  setBusy('btn-register', true);
+  const { error } = await _supabase.auth.signUp({
+    email, password: pw,
+    options: { data: { full_name: name } }
+  });
+  setBusy('btn-register', false, 'Create account');
+  if (error) { setMsg('register', error.message, 'error'); return; }
+  document.getElementById('confirm-email-note').textContent =
+    'We sent a confirmation link to ' + email + '.';
+  show('confirm');
+}
+
+async function handleForgot(e) {
+  e.preventDefault();
+  const email = document.getElementById('fp-email').value.trim();
+  setMsg('forgot', '', '');
+  setBusy('btn-forgot', true);
+  const { error } = await _supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + '/login'
+  });
+  setBusy('btn-forgot', false, 'Send reset link');
+  if (error) { setMsg('forgot', error.message, 'error'); return; }
+  setMsg('forgot', 'Check your inbox for the reset link.', 'ok');
+}
+
+async function handleReset(e) {
+  e.preventDefault();
+  const pw = document.getElementById('rp-pw').value;
+  setMsg('reset', '', '');
+  setBusy('btn-reset', true);
+  const { error } = await _supabase.auth.updateUser({ password: pw });
+  setBusy('btn-reset', false, 'Set new password');
+  if (error) { setMsg('reset', error.message, 'error'); return; }
+  setMsg('reset', 'Password updated. Redirecting…', 'ok');
+  setTimeout(() => window.location.replace('/app'), 1200);
+}
+
+initSupabase();
 </script>
 </body>
 </html>

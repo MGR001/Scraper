@@ -8,36 +8,65 @@ _task: asyncio.Task | None = None
 
 
 async def _check_and_scrape() -> None:
-    """Scrape every source whose next-scrape time has arrived."""
-    from .database import get_db
+    """Scrape every source whose next-scrape time has arrived, scoped per workspace."""
+    # The scheduler uses the service-role client — it has no user JWT.
+    # This is the ONE place the service key legitimately bypasses RLS.
+    from .database import get_service_db
     from .services.scraper import scrape_source
 
-    db = get_db()
+    db = get_service_db()
     try:
-        result = await asyncio.to_thread(
-            lambda: db.table("sources").select("*").eq("is_active", True).execute()
+        # Fetch all active workspaces where scraping is enabled
+        ws_result = await asyncio.to_thread(
+            lambda: db.table("workspaces")
+            .select("id, crawl_max_pages, scrape_enabled, scrape_frequency")
+            .eq("scrape_enabled", True)
+            .execute()
         )
     except Exception as exc:
-        logger.error("Scheduler: failed to fetch sources: %s", exc)
+        logger.error("Scheduler: failed to fetch workspaces: %s", exc)
         return
 
     now = datetime.now(timezone.utc)
-    for source in result.data:
-        last = source.get("last_scraped_at")
-        interval_hours = source.get("scrape_interval", 24)
 
-        if last is None:
-            due = True
-        else:
-            last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
-            due = (now - last_dt) >= timedelta(hours=interval_hours)
+    for workspace in (ws_result.data or []):
+        ws_id       = workspace["id"]
+        max_pages   = workspace.get("crawl_max_pages") or 50
+        frequency   = workspace.get("scrape_frequency") or "daily"
+        interval_h  = {"hourly": 1, "daily": 24, "weekly": 168}.get(frequency, 24)
 
-        if due:
-            try:
-                outcome = await scrape_source(source["id"], source["url"])
-                logger.info("Scheduler scraped '%s': %s", source["name"], outcome)
-            except Exception as exc:
-                logger.error("Scheduler scrape failed for %s: %s", source["url"], exc)
+        try:
+            src_result = await asyncio.to_thread(
+                lambda w=ws_id: db.table("sources")
+                .select("*")
+                .eq("workspace_id", w)
+                .eq("is_active", True)
+                .execute()
+            )
+        except Exception as exc:
+            logger.error("Scheduler: failed to fetch sources for workspace %s: %s", ws_id, exc)
+            continue
+
+        for source in (src_result.data or []):
+            last = source.get("last_scraped_at")
+            src_interval = source.get("scrape_interval") or interval_h
+
+            due = last is None or (
+                now - datetime.fromisoformat(last.replace("Z", "+00:00"))
+                >= timedelta(hours=src_interval)
+            )
+
+            if due:
+                try:
+                    outcome = await scrape_source(
+                        source["id"], source["url"],
+                        max_pages=max_pages, workspace_id=ws_id,
+                    )
+                    logger.info("Scheduler scraped '%s' (ws=%s): %s",
+                                source["name"], ws_id, outcome)
+                except Exception as exc:
+                    logger.error("Scheduler scrape failed for %s (ws=%s): %s",
+                                 source["url"], ws_id, exc)
 
 
 async def _loop() -> None:
@@ -74,3 +103,4 @@ def stop_scheduler() -> None:
     global _task
     if _task:
         asyncio.ensure_future(_stop_scheduler_async())
+

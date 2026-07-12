@@ -1,11 +1,13 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
-from .auth import require_api_key
 from .routers import insights, scraper, sources
+from .routers.auth_router import router as auth_router
+from .routers.workspaces import router as workspaces_router
+from .routers.settings import router as settings_router
 from .scheduler import start_scheduler, stop_scheduler
 
 _FRONTEND = os.path.join(
@@ -24,11 +26,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="RIvals", lifespan=lifespan)
 
-_auth = [Depends(require_api_key)]
+# Auth is per-endpoint via Depends(get_workspace) / Depends(get_current_user)
+app.include_router(sources.router,    prefix="/api/sources",    tags=["sources"])
+app.include_router(scraper.router,    prefix="/api/scraper",    tags=["scraper"])
+app.include_router(insights.router,   prefix="/api/insights",   tags=["insights"])
+app.include_router(auth_router,       prefix="/api",            tags=["auth"])
+app.include_router(workspaces_router, prefix="/api/workspaces", tags=["workspaces"])
+app.include_router(settings_router,   prefix="/api/settings",   tags=["settings"])
 
-app.include_router(sources.router, prefix="/api/sources", tags=["sources"], dependencies=_auth)
-app.include_router(scraper.router, prefix="/api/scraper", tags=["scraper"], dependencies=_auth)
-app.include_router(insights.router, prefix="/api/insights", tags=["insights"], dependencies=_auth)
+
+@app.get("/health", include_in_schema=False)
+async def health():
+    return {"ok": True}
 
 
 @app.get("/", include_in_schema=False)
@@ -37,7 +46,7 @@ async def home():
 
 
 @app.get("/login", include_in_schema=False)
-async def login():
+async def login_page():
     return FileResponse(os.path.join(_FRONTEND, "login.html"))
 
 

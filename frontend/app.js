@@ -12,37 +12,89 @@
     if (name === 'news')        loadNews();
   }
 
-  // ── API key (from login page, held in sessionStorage) ──
-  let _apiKey = sessionStorage.getItem('sh_api_key') || '';
-  if (!_apiKey) { window.location.replace('/login'); }
-  function ensureApiKey() {
-    if (!_apiKey) window.location.replace('/login');
-    return _apiKey;
+  // ── Supabase auth ─────────────────────────────────────────
+  let _supabase    = null;
+  let _session     = null;
+  let _me          = null;
+  let _workspaceId = sessionStorage.getItem('sh_workspace_id') || null;
+
+  async function initAuth() {
+    const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+    if (!cfg.supabase_url) { window.location.replace('/login'); return; }
+    _supabase = supabase.createClient(cfg.supabase_url, cfg.supabase_anon_key);
+
+    const { data: { session } } = await _supabase.auth.getSession();
+    if (!session) { window.location.replace('/login'); return; }
+    _session = session;
+
+    _supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'SIGNED_OUT' || !s) { window.location.replace('/login'); }
+      else { _session = s; }
+    });
+
+    _me = await api('/api/me').catch(() => null);
+    if (!_me || !_me.workspaces.length) {
+      // New user — no workspace yet; onboarding will create one
+      _me = _me || { user: {}, workspaces: [] };
+      _renderUserMenu();
+      startOnboarding();
+      return;
+    }
+
+    if (!_workspaceId || !_me.workspaces.find(w => w.id === _workspaceId)) {
+      _workspaceId = _me.workspaces[0].id;
+      sessionStorage.setItem('sh_workspace_id', _workspaceId);
+    }
+
+    _renderUserMenu();
+
+    const ws = _me.workspaces.find(w => w.id === _workspaceId);
+    if (ws && !ws.onboarded_at) startOnboarding();
+    else showPage('dashboard');
+  }
+
+  function _renderUserMenu() {
+    const ws = (_me.workspaces || []).find(w => w.id === _workspaceId) || {};
+    const name = (_me.user || {}).full_name || (_me.user || {}).email || 'You';
+    const el = document.getElementById('user-menu-area');
+    if (!el) return;
+    el.innerHTML = `<div style="padding:.45rem .9rem .55rem;border-top:1px solid #e2e8f0">
+      <div style="font-size:.78rem;font-weight:600;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(name)}</div>
+      <div style="font-size:.72rem;color:#94a3b8;margin-top:.1rem">${_esc(ws.name || '')}</div>
+    </div>`;
+  }
+
+  function _esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function signOut() {
+    if (_supabase) _supabase.auth.signOut();
+    sessionStorage.clear();
+    window.location.href = '/login';
   }
 
   // ── API helpers ──────────────────────────────────────
   async function api(path, options = {}) {
-    const key = ensureApiKey();
-    const res = await fetch(path, {
-      headers: { 'Content-Type': 'application/json', ...(key ? { 'X-API-Key': key } : {}) },
-      ...options,
-    });
+    const token = _session ? _session.access_token : null;
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    if (_workspaceId) headers['X-Workspace-Id'] = _workspaceId;
+    const res = await fetch(path, { headers, ...options });
     if (res.status === 401) {
-      _apiKey = '';
-      sessionStorage.removeItem('sh_api_key');
-      window.location.replace('/login');
-      throw new Error('Session expired — redirecting to login.');
+      // Try to refresh once
+      if (_supabase) {
+        const { data } = await _supabase.auth.refreshSession();
+        if (data.session) { _session = data.session; return api(path, options); }
+      }
+      signOut();
+      throw new Error('Session expired.');
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(err.detail || 'Request failed');
     }
     return res.status === 204 ? null : res.json();
-  }
-
-  function signOut() {
-    sessionStorage.removeItem('sh_api_key');
-    window.location.href = '/login';
   }
 
   function fmtDate(iso) {
@@ -1528,5 +1580,8 @@
   }
 
   // ── Boot ─────────────────────────────────────────────
-  loadDashboard();
+  // Stub for onboarding — filled in when onboarding module is added (Task 7)
+  function startOnboarding() { showPage('dashboard'); }
+
+  initAuth();
   

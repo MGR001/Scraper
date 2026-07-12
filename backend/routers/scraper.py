@@ -1,9 +1,10 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
-from ..database import get_db
+from ..auth import WorkspaceContext, get_workspace
+from ..database import get_service_db
 from ..scrape_status import get_all_statuses
 from ..services.scraper import scrape_source
 
@@ -12,11 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/run/{source_id}")
-async def run_scrape(source_id: str, background_tasks: BackgroundTasks):
+async def run_scrape(source_id: str, background_tasks: BackgroundTasks,
+                     ws: WorkspaceContext = Depends(get_workspace)):
     """Manually trigger a scrape for one source."""
-    db = get_db()
+    db = get_service_db()
     result = await asyncio.to_thread(
-        lambda: db.table("sources").select("*").eq("id", source_id).execute()
+        lambda: db.table("sources").select("*")
+        .eq("id", source_id).eq("workspace_id", ws.workspace_id).execute()
     )
     if not result.data:
         raise HTTPException(404, "Source not found.")
@@ -34,36 +37,41 @@ async def run_scrape(source_id: str, background_tasks: BackgroundTasks):
         if not stale:
             raise HTTPException(409, "A scrape is already running for this source.")
 
-    background_tasks.add_task(scrape_source, source_id, source["url"])
+    background_tasks.add_task(scrape_source, source_id, source["url"],
+                              workspace_id=ws.workspace_id)
     return {"message": f"Scrape started for '{source['name']}'. Checking sitemap…"}
 
 
 @router.post("/run-all")
-async def run_all_scrapes(background_tasks: BackgroundTasks):
-    """Manually trigger scrapes for all active sources."""
-    db = get_db()
+async def run_all_scrapes(background_tasks: BackgroundTasks,
+                          ws: WorkspaceContext = Depends(get_workspace)):
+    """Manually trigger scrapes for all active sources in this workspace."""
+    db = get_service_db()
     result = await asyncio.to_thread(
-        lambda: db.table("sources").select("*").eq("is_active", True).execute()
+        lambda: db.table("sources").select("*")
+        .eq("workspace_id", ws.workspace_id).eq("is_active", True).execute()
     )
     for source in result.data:
-        background_tasks.add_task(scrape_source, source["id"], source["url"])
+        background_tasks.add_task(scrape_source, source["id"], source["url"],
+                                  workspace_id=ws.workspace_id)
     return {"message": f"Started scraping {len(result.data)} sources (sitemap-aware)."}
 
 
 @router.get("/status")
-async def scrape_statuses():
+async def scrape_statuses(ws: WorkspaceContext = Depends(get_workspace)):
     """Return current scrape state for all sources."""
     return get_all_statuses()
 
 
 @router.get("/urls/{source_id}")
-async def get_source_urls(source_id: str):
+async def get_source_urls(source_id: str, ws: WorkspaceContext = Depends(get_workspace)):
     """List all distinct URLs scraped for a source."""
-    db = get_db()
+    db = get_service_db()
     result = await asyncio.to_thread(
         lambda: db.table("scraped_content")
         .select("url, title, scraped_at")
         .eq("source_id", source_id)
+        .eq("workspace_id", ws.workspace_id)
         .order("scraped_at", desc=True)
         .execute()
     )
@@ -81,12 +89,14 @@ async def get_source_urls(source_id: str):
 
 
 @router.get("/content")
-async def list_content(limit: int = 20, offset: int = 0, source_id: str | None = None):
+async def list_content(limit: int = 20, offset: int = 0, source_id: str | None = None,
+                       ws: WorkspaceContext = Depends(get_workspace)):
     """Paginated list of scraped content (without full text)."""
-    db = get_db()
+    db = get_service_db()
     query = (
         db.table("scraped_content")
         .select("id, source_id, url, title, scraped_at, metadata")
+        .eq("workspace_id", ws.workspace_id)
         .order("scraped_at", desc=True)
         .range(offset, offset + limit - 1)
     )
@@ -97,11 +107,12 @@ async def list_content(limit: int = 20, offset: int = 0, source_id: str | None =
 
 
 @router.get("/content/{content_id}")
-async def get_content(content_id: str):
+async def get_content(content_id: str, ws: WorkspaceContext = Depends(get_workspace)):
     """Fetch full content for a single scraped item."""
-    db = get_db()
+    db = get_service_db()
     result = await asyncio.to_thread(
-        lambda: db.table("scraped_content").select("*").eq("id", content_id).execute()
+        lambda: db.table("scraped_content").select("*")
+        .eq("id", content_id).eq("workspace_id", ws.workspace_id).execute()
     )
     if not result.data:
         raise HTTPException(404, "Content not found.")
@@ -114,7 +125,7 @@ async def news_digest():
     from datetime import datetime, timezone, timedelta
     from ..services.llm import generate_news_digest
 
-    db = get_db()
+    db = get_service_db()
     cutoff = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
 
     sources_res = await asyncio.to_thread(
@@ -175,7 +186,7 @@ async def news_digest():
 @router.get("/news")
 async def news_feed(limit: int = 40, offset: int = 0, category: str | None = None):
     """Latest scraped pages — one entry per URL, fairly mixed across all sources."""
-    db = get_db()
+    db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources").select("id, name, category").execute()
@@ -222,7 +233,7 @@ async def news_feed(limit: int = 40, offset: int = 0, category: str | None = Non
 @router.get("/stats")
 async def get_stats():
     """Overview statistics for the dashboard."""
-    db = get_db()
+    db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources").select("id, is_active").execute()

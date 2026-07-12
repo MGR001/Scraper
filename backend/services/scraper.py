@@ -243,7 +243,9 @@ async def discover_sitemap_urls(base_url: str, max_urls: int = 50) -> list[str]:
 
 
 async def _store_content_chunks(
-    source_id: str, url: str, title: str, content: str, session_id: str | None = None
+    source_id: str, url: str, title: str, content: str,
+    session_id: str | None = None,
+    workspace_id: str | None = None,
 ) -> int:
     """Chunk, embed, and upsert content. Returns number of new chunks stored."""
     chunks = chunk_text(content)
@@ -306,6 +308,8 @@ async def _store_content_chunks(
             }
             if session_id:
                 record["session_id"] = session_id
+            if workspace_id:
+                record["workspace_id"] = workspace_id
             try:
                 await asyncio.to_thread(
                     lambda r=record: db.table("scraped_content").insert(r).execute()
@@ -443,7 +447,8 @@ async def _scrape_feed(source_id: str, feed_url: str, session_id: str | None = N
     return {"pages": len(articles), "new_chunks": total_new, "errors": errors}
 
 
-async def scrape_source(source_id: str, base_url: str, max_pages: int = 50) -> dict:
+async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
+                        workspace_id: str | None = None) -> dict:
     """
     Full crawl for a source:
       1. Discover seed URLs from sitemap (if available).

@@ -19,20 +19,21 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
-async def get_relevant_context(question: str, top_k: int = 8) -> list[dict]:
+async def get_relevant_context(question: str, top_k: int = 8,
+                               workspace_id: str | None = None) -> list[dict]:
     """Vector-search Supabase for the most relevant content chunks."""
     embedding = await get_embedding(question)
     db = get_db()
+    params: dict = {
+        "query_embedding": embedding,
+        "match_threshold": settings.match_threshold,
+        "match_count": top_k,
+    }
+    if workspace_id:
+        params["p_workspace_id"] = workspace_id
     try:
         result = await asyncio.to_thread(
-            lambda: db.rpc(
-                "match_content",
-                {
-                    "query_embedding": embedding,
-                    "match_threshold": settings.match_threshold,
-                    "match_count": top_k,
-                },
-            ).execute()
+            lambda: db.rpc("match_content", params).execute()
         )
         return result.data or []
     except Exception as exc:
@@ -40,12 +41,13 @@ async def get_relevant_context(question: str, top_k: int = 8) -> list[dict]:
         return []
 
 
-async def chat_with_context(question: str) -> tuple[str, list[dict]]:
+async def chat_with_context(question: str,
+                            workspace_id: str | None = None) -> tuple[str, list[dict]]:
     """
     RAG pipeline: retrieve relevant chunks → build prompt → call GPT-4o.
     Returns (answer_text, list_of_source_refs).
     """
-    sources = await get_relevant_context(question)
+    sources = await get_relevant_context(question, workspace_id=workspace_id)
 
     if sources:
         context_parts = [

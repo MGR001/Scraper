@@ -1,9 +1,10 @@
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from ..database import get_db
+from ..auth import WorkspaceContext, get_workspace
+from ..database import get_service_db
 from ..models.schemas import ChatMessage
 from ..services.llm import chat_with_context, generate_source_summary, generate_comparison, generate_competitor_changes, generate_gtm_heatmap, generate_positioning_teardown, generate_campaign_messaging
 
@@ -11,19 +12,20 @@ router = APIRouter()
 
 
 @router.post("/chat")
-async def chat(message: ChatMessage):
+async def chat(message: ChatMessage, ws: WorkspaceContext = Depends(get_workspace)):
     """Ask a strategy question; GPT-4o answers using your scraped content."""
-    answer, sources = await chat_with_context(message.message)
+    answer, sources = await chat_with_context(message.message, workspace_id=ws.workspace_id)
     return {"answer": answer, "sources": sources}
 
 
 @router.post("/summary/{source_id}")
-async def summarise_source(source_id: str):
+async def summarise_source(source_id: str, ws: WorkspaceContext = Depends(get_workspace)):
     """Generate (or regenerate) a competitive intelligence summary for a source."""
-    db = get_db()
+    db = get_service_db()
 
     src_res = await asyncio.to_thread(
-        lambda: db.table("sources").select("*").eq("id", source_id).execute()
+        lambda: db.table("sources").select("*")
+        .eq("id", source_id).eq("workspace_id", ws.workspace_id).execute()
     )
     if not src_res.data:
         raise HTTPException(404, "Source not found.")
@@ -55,7 +57,7 @@ async def summarise_source(source_id: str):
 @router.post("/comparison")
 async def competitive_comparison():
     """Generate a McKinsey-style cross-competitor comparison from existing summaries."""
-    db = get_db()
+    db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
@@ -79,7 +81,7 @@ async def competitive_comparison():
 @router.get("/competitor-changes")
 async def competitor_changes():
     """Compare the latest scrape session vs the one before it for each competitor."""
-    db = get_db()
+    db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
@@ -158,7 +160,7 @@ async def competitor_changes():
 @router.get("/gtm-heatmap")
 async def gtm_heatmap():
     """Generate an ICP × competitor presence heatmap from scraped competitor content."""
-    db = get_db()
+    db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
@@ -234,7 +236,7 @@ async def gtm_heatmap():
 @router.get("/positioning-teardown")
 async def positioning_teardown():
     """Reconstruct each competitor's positioning into against / for / claim / proof."""
-    db = get_db()
+    db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
@@ -301,7 +303,7 @@ async def positioning_teardown():
 @router.get("/campaign-messaging")
 async def campaign_messaging():
     """Generate campaign messaging suggestions across five channels using competitor + own company intelligence."""
-    db = get_db()
+    db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
