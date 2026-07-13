@@ -100,6 +100,7 @@ class WorkspaceUpdate(BaseModel):
     timezone: str | None = None
     crawl_max_pages: int | None = None
     slack_webhook_url: str | None = None
+    onboarded_at: str | None = None
 
 
 @router.patch("/{workspace_id}")
