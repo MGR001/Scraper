@@ -104,8 +104,27 @@ alter table sources add constraint sources_workspace_url_unique
   unique (workspace_id, url);
 
 -- scraped_content: already per (source_id, content_hash), add workspace
-drop index if exists scraped_content_source_hash_unique;
-alter table scraped_content drop constraint if exists scraped_content_source_hash_unique;
+-- The old uniqueness may exist either as a table constraint (whose backing
+-- index can't be dropped directly) or as a bare index, depending on which
+-- path supabase_setup.sql took — handle both without erroring.
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conname = 'scraped_content_source_hash_unique'
+      and conrelid = 'scraped_content'::regclass
+  ) then
+    alter table scraped_content drop constraint scraped_content_source_hash_unique;
+  elsif exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'scraped_content'
+      and indexname = 'scraped_content_source_hash_unique'
+  ) then
+    drop index scraped_content_source_hash_unique;
+  end if;
+end $$;
+
 create unique index if not exists scraped_content_ws_src_hash_unique
   on scraped_content (workspace_id, source_id, content_hash);
 
