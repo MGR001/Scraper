@@ -11,6 +11,7 @@
     if (name === 'competitors') { loadCompetitors(); startStatusPolling(); }
     if (name === 'news')        loadNews();
     if (name === 'settings')    loadSettings();
+    if (name === 'chat')        loadCompetitorChanges();
   }
 
   // ── Supabase auth ─────────────────────────────────────────
@@ -1059,16 +1060,25 @@
 
   let _changesData = null;
 
+  // ── Insights tabs ──────────────────────────────────────
+  function showInsightsTab(tab) {
+    ['changes', 'canvas', 'matrix', 'kano'].forEach(t => {
+      document.getElementById('ins-sub-' + t).classList.toggle('hidden', t !== tab);
+      const btn = document.querySelector('[data-ins-tab="' + t + '"]');
+      btn.classList.toggle('active', t === tab);
+      btn.setAttribute('aria-selected', t === tab ? 'true' : 'false');
+    });
+  }
+
   // ── Competitor change detection ───────────────────────
-  async function loadCompetitorChanges() {
+  // Loads once per session (fresh on every new login / page reload) and shows
+  // immediately when the tab is opened; the button forces a manual re-fetch.
+  async function loadCompetitorChanges(force = false) {
     const panel   = document.getElementById('changes-panel');
     const content = document.getElementById('changes-content');
     const btn     = document.getElementById('changes-btn');
-    if (!panel.classList.contains('hidden')) {
-      panel.classList.add('hidden');
-      return;
-    }
     panel.classList.remove('hidden');
+    if (_changesData && !force) return;
     content.innerHTML = '<p class="text-slate-400 text-sm animate-pulse">Analysing competitor changes…</p>';
     btn.disabled = true;
     try {
@@ -1121,7 +1131,7 @@
         <h3 class="font-semibold text-slate-900 text-sm">Competitor Change Analysis <span class="text-xs font-normal text-slate-500">(last 7 days vs previous 30 days)</span></h3>
         <div class="flex items-center gap-3">
           <button onclick="exportChanges()" class="text-xs text-slate-400 hover:text-blue-400 transition">Export</button>
-          <button onclick="loadCompetitorChanges()" class="text-xs text-slate-400 hover:text-blue-400 transition">Hide</button>
+          <button onclick="loadCompetitorChanges(true)" class="text-xs text-slate-400 hover:text-blue-400 transition">Refresh</button>
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${cards}</div>`;
