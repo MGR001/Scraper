@@ -709,6 +709,8 @@
         <button class="gtm-sub-tab active" data-gtm-tab="heatmap" onclick="showGtmTab('heatmap')" role="tab" aria-selected="true">Segment Heatmap</button>
         <button class="gtm-sub-tab" data-gtm-tab="positioning" onclick="showGtmTab('positioning')" role="tab" aria-selected="false">Positioning Teardown</button>
         <button class="gtm-sub-tab" data-gtm-tab="messaging" onclick="showGtmTab('messaging')" role="tab" aria-selected="false">Campaign Messaging</button>
+        <button class="gtm-sub-tab" data-gtm-tab="house" onclick="showGtmTab('house')" role="tab" aria-selected="false">Messaging House</button>
+        <button class="gtm-sub-tab" data-gtm-tab="battlecards" onclick="showGtmTab('battlecards')" role="tab" aria-selected="false">Battlecards</button>
       </nav>
     </div>
     <!-- ── Heatmap sub-panel ──── -->
@@ -832,6 +834,56 @@
         <p class="text-slate-500 text-sm mt-2">Click <strong class="text-slate-700">Generate Messaging</strong> to build campaign copy from your competitive intelligence.</p>
       </div>
     </div><!-- /gtm-sub-messaging -->
+
+    <!-- ── Messaging House sub-panel ─────────────────── -->
+    <div id="gtm-sub-house" class="p-6 max-w-5xl mx-auto hidden" role="tabpanel">
+      <div class="flex justify-end mb-6">
+        <button onclick="loadMessagingHouse()" id="mh-refresh-btn"
+          class="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-2 rounded-lg transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+          </svg>
+          Generate Messaging House
+        </button>
+      </div>
+      <div id="mh-loading" class="hidden text-center py-20">
+        <span class="spinner"></span>
+        <p class="text-slate-500 text-sm mt-4 animate-pulse">Building your messaging house from competitive intelligence&#8230;</p>
+      </div>
+      <div id="mh-error" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 mb-6"></div>
+      <div id="mh-content" class="hidden"></div>
+      <div id="mh-empty" class="text-center py-20 border border-dashed border-border rounded-xl">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-slate-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/>
+        </svg>
+        <p class="text-slate-500 text-sm mt-2">Click <strong class="text-slate-700">Generate Messaging House</strong> to build your positioning statement, tagline, and message pillars.</p>
+      </div>
+    </div><!-- /gtm-sub-house -->
+
+    <!-- ── Battlecards sub-panel ──────────────────────── -->
+    <div id="gtm-sub-battlecards" class="p-6 max-w-7xl mx-auto hidden" role="tabpanel">
+      <div class="flex justify-end mb-6">
+        <button onclick="loadBattlecards()" id="bc-refresh-btn"
+          class="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-2 rounded-lg transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+          </svg>
+          Generate Battlecards
+        </button>
+      </div>
+      <div id="bc-loading" class="hidden text-center py-20">
+        <span class="spinner"></span>
+        <p class="text-slate-500 text-sm mt-4 animate-pulse">Building sales battlecards from competitive intelligence&#8230;</p>
+      </div>
+      <div id="bc-error" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 mb-6"></div>
+      <div id="bc-content" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-5"></div>
+      <div id="bc-empty" class="text-center py-20 border border-dashed border-border rounded-xl">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-slate-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.75h-.152c-3.196 0-6.1-1.248-8.25-3.286z"/>
+        </svg>
+        <p class="text-slate-500 text-sm mt-2">Click <strong class="text-slate-700">Generate Battlecards</strong> to build sales-ready cards for each competitor.</p>
+      </div>
+    </div><!-- /gtm-sub-battlecards -->
   </div><!-- /page-gtm -->
 
   <!-- ── Settings ──────────────────────────────────── -->

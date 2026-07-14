@@ -450,7 +450,7 @@
     const summDiv = document.getElementById(`summary-${sourceId}`);
     btn.disabled  = true;
     btn.innerHTML = '<span class="spinner"></span> Generating\u2026';
-    summDiv.innerHTML = '<div class="flex items-center gap-2 text-slate-500 text-sm"><span class="spinner"></span> Analysing content with GPT-4o\u2026</div>';
+    summDiv.innerHTML = '<div class="flex items-center gap-2 text-slate-500 text-sm"><span class="spinner"></span> Analysing content with GPT-5.6\u2026</div>';
     try {
       const res = await api(`/api/insights/summary/${sourceId}`, { method: 'POST' });
       summDiv.innerHTML = `<div class="prose-answer">${mdToHtml(res.summary)}</div>`;
@@ -476,7 +476,7 @@
     const body = document.getElementById('comparison-body');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Analysing…';
-    body.innerHTML = '<div class="flex items-center gap-2 text-slate-400 text-sm"><span class="spinner"></span> GPT-4o is analysing all competitor profiles…</div>';
+    body.innerHTML = '<div class="flex items-center gap-2 text-slate-400 text-sm"><span class="spinner"></span> GPT-5.6 is analysing all competitor profiles…</div>';
     try {
       const data = await api('/api/insights/comparison', { method: 'POST' });
       renderComparison(data);
@@ -1584,7 +1584,7 @@
   let _teardownData = null;
 
   function showGtmTab(tab) {
-    ['heatmap','positioning','messaging'].forEach(t => {
+    ['heatmap','positioning','messaging','house','battlecards'].forEach(t => {
       document.getElementById('gtm-sub-' + t).classList.toggle('hidden', t !== tab);
       const btn = document.querySelector('[data-gtm-tab="' + t + '"]');
       btn.classList.toggle('active', t === tab);
@@ -1748,6 +1748,129 @@
       + (m.cta ? '<div class="pt-1"><span class="inline-block text-xs font-semibold px-3 py-1.5 rounded-lg" style="background:rgba(59,130,246,0.18);color:#93c5fd">'
         + esc(m.cta) + '</span></div>' : '')
       + '</article>';
+  }
+
+  // ── Messaging House ──────────────────────────────────
+  let _messagingHouseData = null;
+
+  async function loadMessagingHouse() {
+    const btn     = document.getElementById('mh-refresh-btn');
+    const loading = document.getElementById('mh-loading');
+    const errEl   = document.getElementById('mh-error');
+    const content = document.getElementById('mh-content');
+    const empty   = document.getElementById('mh-empty');
+    btn.disabled = true;
+    loading.classList.remove('hidden');
+    [errEl, content, empty].forEach(el => el.classList.add('hidden'));
+    try {
+      const data = await api('/api/insights/messaging-house');
+      _messagingHouseData = data;
+      renderMessagingHouse(data);
+    } catch (e) {
+      errEl.textContent = 'Error: ' + e.message;
+      errEl.classList.remove('hidden');
+      empty.classList.remove('hidden');
+    } finally {
+      loading.classList.add('hidden');
+      btn.disabled = false;
+    }
+  }
+
+  function renderMessagingHouse(data) {
+    const content = document.getElementById('mh-content');
+    const empty   = document.getElementById('mh-empty');
+    const pillars = data.pillars || [];
+    if (!pillars.length && !data.tagline) { empty.classList.remove('hidden'); return; }
+
+    const pillarCards = pillars.map(p => `
+      <div class="bg-card border border-border rounded-xl p-5">
+        <p class="text-xs font-bold text-blue-600 uppercase tracking-wide mb-2">${esc(p.name)}</p>
+        <p class="text-sm font-semibold text-slate-900 mb-3">${esc(p.message)}</p>
+        <ul class="space-y-1.5">
+          ${(p.proof_points || []).map(pt => `<li class="flex items-start gap-2 text-xs text-slate-500"><span class="text-blue-400 mt-0.5">&#9679;</span>${esc(pt)}</li>`).join('')}
+        </ul>
+      </div>`).join('');
+
+    content.innerHTML = `
+      <div class="rounded-xl p-6 mb-5 text-center" style="background:linear-gradient(135deg,#12314f,#1B4370)">
+        <p class="text-xs font-semibold text-blue-300 uppercase tracking-widest mb-2">Tagline</p>
+        <p class="text-2xl font-bold text-white mb-4">${esc(data.tagline || '')}</p>
+        <p class="text-sm text-blue-100 max-w-2xl mx-auto leading-relaxed">${esc(data.positioning_statement || '')}</p>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">${pillarCards}</div>`;
+    content.classList.remove('hidden');
+  }
+
+  // ── Battlecards ──────────────────────────────────────
+  let _battlecardsData = null;
+
+  async function loadBattlecards() {
+    const btn     = document.getElementById('bc-refresh-btn');
+    const loading = document.getElementById('bc-loading');
+    const errEl   = document.getElementById('bc-error');
+    const content = document.getElementById('bc-content');
+    const empty   = document.getElementById('bc-empty');
+    btn.disabled = true;
+    loading.classList.remove('hidden');
+    [errEl, content, empty].forEach(el => el.classList.add('hidden'));
+    try {
+      const data = await api('/api/insights/battlecards');
+      _battlecardsData = data;
+      renderBattlecards(data);
+    } catch (e) {
+      errEl.textContent = 'Error: ' + e.message;
+      errEl.classList.remove('hidden');
+      empty.classList.remove('hidden');
+    } finally {
+      loading.classList.add('hidden');
+      btn.disabled = false;
+    }
+  }
+
+  function renderBattlecards(data) {
+    const content = document.getElementById('bc-content');
+    const empty   = document.getElementById('bc-empty');
+    const cards   = data.battlecards || [];
+    if (!cards.length) { empty.classList.remove('hidden'); return; }
+
+    content.innerHTML = cards.map(c => `
+      <div class="bg-card border border-border rounded-xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-border bg-surface">
+          <p class="font-bold text-slate-900 text-sm">${esc(c.competitor)}</p>
+          <p class="text-xs text-slate-500 mt-0.5">${esc(c.overview || '')}</p>
+        </div>
+        <div class="p-5 space-y-4">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <p class="text-[10px] font-bold text-red-600 uppercase tracking-wide mb-1.5">Their strengths</p>
+              <ul class="space-y-1">${(c.their_strengths || []).map(s => `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="text-red-400 mt-0.5">&#9679;</span>${esc(s)}</li>`).join('')}</ul>
+            </div>
+            <div>
+              <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1.5">Their weaknesses</p>
+              <ul class="space-y-1">${(c.their_weaknesses || []).map(s => `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="text-emerald-400 mt-0.5">&#9679;</span>${esc(s)}</li>`).join('')}</ul>
+            </div>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Objection handling</p>
+            <div class="space-y-2">
+              ${(c.objections || []).map(o => `
+                <div class="bg-surface border border-border rounded-lg p-2.5">
+                  <p class="text-xs font-semibold text-slate-700">&ldquo;${esc(o.objection)}&rdquo;</p>
+                  <p class="text-xs text-slate-500 mt-1">&#8594; ${esc(o.response)}</p>
+                </div>`).join('')}
+            </div>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold text-blue-600 uppercase tracking-wide mb-1.5">Why we win</p>
+            <ul class="space-y-1">${(c.why_we_win || []).map(s => `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="text-blue-400 mt-0.5">&#9679;</span>${esc(s)}</li>`).join('')}</ul>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold text-amber-600 uppercase tracking-wide mb-1.5">Landmines to plant</p>
+            <ul class="space-y-1">${(c.landmines || []).map(s => `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="text-amber-400 mt-0.5">&#9679;</span>${esc(s)}</li>`).join('')}</ul>
+          </div>
+        </div>
+      </div>`).join('');
+    content.classList.remove('hidden');
   }
 
   // ── Utilities ────────────────────────────────────────

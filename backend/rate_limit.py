@@ -19,6 +19,8 @@ LIMITS: dict[str, int] = {
     "positioning_canvas": 5,
     "feature_matrix":     5,
     "kano_analysis":      5,
+    "messaging_house":    5,
+    "battlecards":        5,
 }
 WINDOW_SECONDS = 3600  # 1 hour
 

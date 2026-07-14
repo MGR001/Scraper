@@ -44,7 +44,7 @@ async def get_relevant_context(question: str, top_k: int = 8,
 async def chat_with_context(question: str,
                             workspace_id: str | None = None) -> tuple[str, list[dict]]:
     """
-    RAG pipeline: retrieve relevant chunks → build prompt → call GPT-4o.
+    RAG pipeline: retrieve relevant chunks → build prompt → call the chat model.
     Returns (answer_text, list_of_source_refs).
     """
     sources = await get_relevant_context(question, workspace_id=workspace_id)
@@ -74,8 +74,7 @@ async def chat_with_context(question: str,
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ],
-        temperature=0.3,
-        max_tokens=1500,
+        max_completion_tokens=1500,
     )
 
     answer = response.choices[0].message.content or ""
@@ -134,8 +133,7 @@ async def generate_source_summary(source: dict, content_rows: list[dict]) -> str
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ],
-        temperature=0.2,
-        max_tokens=1000,
+        max_completion_tokens=1000,
     )
     return response.choices[0].message.content or ""
 
@@ -203,8 +201,7 @@ async def generate_comparison(sources: list[dict]) -> dict:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor profiles to analyze (include ALL of them):\n\n{context}"},
         ],
-        temperature=0.15,
-        max_tokens=3500,
+        max_completion_tokens=3500,
         response_format={"type": "json_object"},
     )
     return _json.loads(response.choices[0].message.content or "{}")
@@ -258,8 +255,7 @@ async def generate_competitor_changes(
                 ),
             },
         ],
-        temperature=0.2,
-        max_tokens=800,
+        max_completion_tokens=800,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -309,8 +305,7 @@ async def generate_news_digest(articles: list[dict]) -> dict:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"News articles from the last 5 days:\n\n{context}"},
         ],
-        temperature=0.2,
-        max_tokens=1500,
+        max_completion_tokens=1500,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -394,8 +389,7 @@ async def generate_gtm_heatmap(competitors: list[dict], own_company: dict | None
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor content:\n\n{context}"},
         ],
-        temperature=0.2,
-        max_tokens=2500,
+        max_completion_tokens=2500,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -460,8 +454,7 @@ async def generate_positioning_teardown(competitors: list[dict], own_company: di
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor content:\n\n{context}"},
         ],
-        temperature=0.2,
-        max_tokens=1500,
+        max_completion_tokens=1500,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -538,8 +531,7 @@ async def generate_campaign_messaging(competitors: list[dict], own_company: dict
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitive intelligence:\n\n{context}"},
         ],
-        temperature=0.35,
-        max_tokens=3000,
+        max_completion_tokens=3000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -605,8 +597,7 @@ async def generate_positioning_canvas(competitors: list[dict], own_company: dict
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor content:\n\n{context}"},
         ],
-        temperature=0.25,
-        max_tokens=1500,
+        max_completion_tokens=1500,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -667,8 +658,7 @@ async def generate_feature_matrix(competitors: list[dict], own_company: dict | N
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor content:\n\n{context}"},
         ],
-        temperature=0.2,
-        max_tokens=3000,
+        max_completion_tokens=3000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -727,8 +717,7 @@ async def generate_kano_analysis(competitors: list[dict], own_company: dict | No
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor content:\n\n{context}"},
         ],
-        temperature=0.25,
-        max_tokens=2500,
+        max_completion_tokens=2500,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -736,4 +725,125 @@ async def generate_kano_analysis(competitors: list[dict], own_company: dict | No
         return _json.loads(raw)
     except Exception:
         logger.error("Kano analysis JSON parse failed: %s", raw[:200])
+        return {}
+
+
+async def generate_messaging_house(competitors: list[dict], own_company: dict | None = None) -> dict:
+    """
+    Build a messaging house for the user's own company: a tagline, positioning
+    statement, and 3-4 message pillars each with proof points. Competitor
+    content is used only to surface genuine differentiation, not as subjects
+    of the output — the messaging house is entirely about the own company.
+    """
+    import json as _json
+
+    if not own_company:
+        return {}
+
+    comp_parts = [f"## {c['name']} ({c['url']})\n{c['content_summary']}" for c in competitors]
+    comp_context = "\n\n---\n\n".join(comp_parts) or "No competitor content available."
+
+    system_prompt = (
+        "You are a B2B messaging strategist building a messaging house (positioning statement, "
+        "tagline, and message pillars) for the user's own company, using their website content and "
+        "the competitive landscape to find genuine differentiation.\n"
+        "Analyse the own-company content, using the competitor content only to identify gaps and "
+        "differentiation opportunities — the output is entirely about the user's own company, not "
+        "the competitors.\n"
+        "Produce:\n"
+        "1. A short, punchy tagline (4-8 words).\n"
+        "2. A positioning statement in the classic form: 'For [target buyer], [company] is the "
+        "[category] that [key benefit], unlike [alternative/status quo], [key differentiator].'\n"
+        "3. 3-4 message pillars — each a distinct theme with one core message and 2-4 concrete proof "
+        "points drawn from the actual content (features, stats, guarantees, customer proof, etc.).\n"
+        "Return ONLY valid JSON with no markdown fences. Schema:\n"
+        "{\n"
+        "  \"tagline\": \"<short tagline>\",\n"
+        "  \"positioning_statement\": \"<one sentence, the classic positioning statement form>\",\n"
+        "  \"pillars\": [\n"
+        "    {\n"
+        "      \"name\": \"<pillar name, 2-4 words>\",\n"
+        "      \"message\": \"<the core claim for this pillar, one sentence>\",\n"
+        "      \"proof_points\": [\"<concrete supporting evidence>\"]\n"
+        "    }\n"
+        "  ]\n"
+        "}"
+    )
+
+    user_content = (
+        f"YOUR COMPANY: {own_company['name']} ({own_company['url']})\n{own_company['content_summary']}\n\n"
+        f"=== Competitive landscape (for differentiation context only) ===\n\n{comp_context}"
+    )
+
+    response = await _get_client().chat.completions.create(
+        model=settings.chat_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ],
+        max_completion_tokens=1500,
+        response_format={"type": "json_object"},
+    )
+    raw = response.choices[0].message.content or "{}"
+    try:
+        return _json.loads(raw)
+    except Exception:
+        logger.error("Messaging house JSON parse failed: %s", raw[:200])
+        return {}
+
+
+async def generate_battlecards(competitors: list[dict], own_company: dict | None = None) -> dict:
+    """
+    Generate one sales battlecard per competitor: overview, their strengths/
+    weaknesses, common objections with responses, why-we-win points, and
+    landmines to plant with prospects — all framed from the user's own
+    company's perspective.
+    """
+    import json as _json
+
+    if not own_company:
+        return {}
+
+    parts = [f"## {c['name']} ({c['url']})\n{c['content_summary']}" for c in competitors]
+    context = "\n\n---\n\n".join(parts)
+    own_name = own_company["name"]
+
+    system_prompt = (
+        "You are a sales enablement strategist building competitor battlecards for a sales team.\n"
+        f"The user's own company is {own_name}. Their content:\n{own_company['content_summary']}\n\n"
+        f"For EACH competitor in the content below, produce a battlecard framed entirely from "
+        f"{own_name}'s perspective — 'why we win' means why {own_name} wins.\n"
+        "Return ONLY valid JSON with no markdown fences. Schema:\n"
+        "{\n"
+        "  \"battlecards\": [\n"
+        "    {\n"
+        "      \"competitor\": \"<exact competitor name>\",\n"
+        "      \"overview\": \"<1-2 sentences: who they are and their market position>\",\n"
+        "      \"their_strengths\": [\"<genuine strength, grounded in their content>\"],\n"
+        "      \"their_weaknesses\": [\"<genuine gap or weakness visible in their content>\"],\n"
+        "      \"objections\": [\n"
+        "        {\"objection\": \"<what a prospect might say>\", \"response\": \"<what the rep should say back>\"}\n"
+        "      ],\n"
+        "      \"why_we_win\": [\"<concrete reason grounded in evidence>\"],\n"
+        "      \"landmines\": [\"<a question to plant with the prospect that surfaces a real competitor weakness>\"]\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Produce 3-4 items per list, per competitor. Include every competitor provided."
+    )
+
+    response = await _get_client().chat.completions.create(
+        model=settings.chat_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Competitor content:\n\n{context}"},
+        ],
+        max_completion_tokens=3000,
+        response_format={"type": "json_object"},
+    )
+    raw = response.choices[0].message.content or "{}"
+    try:
+        return _json.loads(raw)
+    except Exception:
+        logger.error("Battlecards JSON parse failed: %s", raw[:200])
         return {}

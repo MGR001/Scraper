@@ -7,7 +7,7 @@ from ..auth import WorkspaceContext, get_workspace
 from ..database import get_service_db
 from ..models.schemas import ChatMessage
 from ..rate_limit import check_rate_limit
-from ..services.llm import chat_with_context, generate_source_summary, generate_comparison, generate_competitor_changes, generate_gtm_heatmap, generate_positioning_teardown, generate_campaign_messaging, generate_positioning_canvas, generate_feature_matrix, generate_kano_analysis
+from ..services.llm import chat_with_context, generate_source_summary, generate_comparison, generate_competitor_changes, generate_gtm_heatmap, generate_positioning_teardown, generate_campaign_messaging, generate_positioning_canvas, generate_feature_matrix, generate_kano_analysis, generate_messaging_house, generate_battlecards
 
 router = APIRouter()
 
@@ -527,3 +527,113 @@ async def campaign_messaging(ws: WorkspaceContext = Depends(get_workspace)):
     own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
 
     return await generate_campaign_messaging(competitors_data, own_company=own_company)
+
+
+@router.get("/messaging-house")
+async def messaging_house(ws: WorkspaceContext = Depends(get_workspace)):
+    """Build a messaging house (tagline, positioning statement, pillars) for the user's own company."""
+    check_rate_limit(ws.workspace_id, "messaging_house")
+    db = get_service_db()
+
+    sources_res = await asyncio.to_thread(
+        lambda: db.table("sources")
+        .select("id, name, url")
+        .eq("workspace_id", ws.workspace_id)
+        .eq("is_active", True)
+        .eq("category", "competitor")
+        .execute()
+    )
+    sources = sources_res.data or []
+
+    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
+        content_res = await asyncio.to_thread(
+            lambda sid=src["id"]: db.table("scraped_content")
+            .select("content")
+            .eq("source_id", sid)
+            .order("scraped_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        seen: set[str] = set()
+        parts: list[str] = []
+        total = 0
+        for row in (content_res.data or []):
+            chunk = (row.get("content") or "").strip()
+            if not chunk or chunk in seen:
+                continue
+            seen.add(chunk)
+            parts.append(chunk[:400])
+            total += len(chunk)
+            if total >= max_chars:
+                break
+        return "\n\n".join(parts) or "No content scraped yet."
+
+    competitors_data = []
+    for src in sources:
+        competitors_data.append({
+            "name": src["name"],
+            "url": src["url"],
+            "content_summary": await _build_content(src),
+        })
+
+    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+    if not own_company:
+        raise HTTPException(400, "Add your own company in the My Company tab first.")
+
+    return await generate_messaging_house(competitors_data, own_company=own_company)
+
+
+@router.get("/battlecards")
+async def battlecards(ws: WorkspaceContext = Depends(get_workspace)):
+    """Generate one sales battlecard per competitor, framed from the user's own company's perspective."""
+    check_rate_limit(ws.workspace_id, "battlecards")
+    db = get_service_db()
+
+    sources_res = await asyncio.to_thread(
+        lambda: db.table("sources")
+        .select("id, name, url")
+        .eq("workspace_id", ws.workspace_id)
+        .eq("is_active", True)
+        .eq("category", "competitor")
+        .execute()
+    )
+    sources = sources_res.data or []
+    if not sources:
+        raise HTTPException(400, "No active competitor sources found. Add competitors in the Sources tab first.")
+
+    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
+        content_res = await asyncio.to_thread(
+            lambda sid=src["id"]: db.table("scraped_content")
+            .select("content")
+            .eq("source_id", sid)
+            .order("scraped_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        seen: set[str] = set()
+        parts: list[str] = []
+        total = 0
+        for row in (content_res.data or []):
+            chunk = (row.get("content") or "").strip()
+            if not chunk or chunk in seen:
+                continue
+            seen.add(chunk)
+            parts.append(chunk[:400])
+            total += len(chunk)
+            if total >= max_chars:
+                break
+        return "\n\n".join(parts) or "No content scraped yet."
+
+    competitors_data = []
+    for src in sources:
+        competitors_data.append({
+            "name": src["name"],
+            "url": src["url"],
+            "content_summary": await _build_content(src),
+        })
+
+    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+    if not own_company:
+        raise HTTPException(400, "Add your own company in the My Company tab first.")
+
+    return await generate_battlecards(competitors_data, own_company=own_company)
