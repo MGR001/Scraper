@@ -92,7 +92,7 @@ async def chat_with_context(question: str,
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ],
-        max_completion_tokens=1500,
+        max_completion_tokens=4000,
     )
 
     answer = response.choices[0].message.content or ""
@@ -151,7 +151,7 @@ async def generate_source_summary(source: dict, content_rows: list[dict]) -> str
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ],
-        max_completion_tokens=1000,
+        max_completion_tokens=4000,
     )
     return response.choices[0].message.content or ""
 
@@ -219,7 +219,7 @@ async def generate_comparison(sources: list[dict]) -> dict:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor profiles to analyze (include ALL of them):\n\n{context}"},
         ],
-        max_completion_tokens=3500,
+        max_completion_tokens=12000,
         response_format={"type": "json_object"},
     )
     return _json.loads(response.choices[0].message.content or "{}")
@@ -273,7 +273,7 @@ async def generate_competitor_changes(
                 ),
             },
         ],
-        max_completion_tokens=800,
+        max_completion_tokens=8000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -323,7 +323,7 @@ async def generate_news_digest(articles: list[dict]) -> dict:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"News articles from the last 5 days:\n\n{context}"},
         ],
-        max_completion_tokens=1500,
+        max_completion_tokens=8000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -407,7 +407,7 @@ async def generate_gtm_heatmap(competitors: list[dict], own_company: dict | None
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor content:\n\n{context}"},
         ],
-        max_completion_tokens=2500,
+        max_completion_tokens=12000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -472,7 +472,7 @@ async def generate_positioning_teardown(competitors: list[dict], own_company: di
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor content:\n\n{context}"},
         ],
-        max_completion_tokens=1500,
+        max_completion_tokens=8000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -549,7 +549,7 @@ async def generate_campaign_messaging(competitors: list[dict], own_company: dict
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitive intelligence:\n\n{context}"},
         ],
-        max_completion_tokens=3000,
+        max_completion_tokens=12000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -615,7 +615,7 @@ async def generate_positioning_canvas(competitors: list[dict], own_company: dict
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor content:\n\n{context}"},
         ],
-        max_completion_tokens=1500,
+        max_completion_tokens=6000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -676,7 +676,7 @@ async def generate_feature_matrix(competitors: list[dict], own_company: dict | N
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor content:\n\n{context}"},
         ],
-        max_completion_tokens=3000,
+        max_completion_tokens=12000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -735,7 +735,7 @@ async def generate_kano_analysis(competitors: list[dict], own_company: dict | No
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor content:\n\n{context}"},
         ],
-        max_completion_tokens=2500,
+        max_completion_tokens=8000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -799,7 +799,7 @@ async def generate_messaging_house(competitors: list[dict], own_company: dict | 
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ],
-        max_completion_tokens=1500,
+        max_completion_tokens=6000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
@@ -856,7 +856,7 @@ async def generate_battlecards(competitors: list[dict], own_company: dict | None
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Competitor content:\n\n{context}"},
         ],
-        max_completion_tokens=3000,
+        max_completion_tokens=12000,
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
