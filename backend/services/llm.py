@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, AuthenticationError
 
 from ..config import settings
 from ..database import get_db, get_service_db
@@ -17,6 +17,24 @@ def _get_client() -> AsyncOpenAI:
     if _client is None:
         _client = AsyncOpenAI(api_key=settings.openai_api_key)
     return _client
+
+
+async def _create_completion(**kwargs):
+    """
+    chat.completions.create with a short retry on transient 401
+    'insufficient permissions' errors — seen intermittently (~1 in 5 calls)
+    from gpt-5.6-terra since its July 2026 launch; retrying almost always
+    succeeds within a couple of attempts.
+    """
+    attempts = 3
+    for attempt in range(attempts):
+        try:
+            return await _get_client().chat.completions.create(**kwargs)
+        except AuthenticationError:
+            if attempt == attempts - 1:
+                raise
+            logger.warning("Transient OpenAI auth error, retrying (attempt %d/%d)", attempt + 1, attempts)
+            await asyncio.sleep(1.5 * (attempt + 1))
 
 
 async def get_relevant_context(question: str, top_k: int = 8,
@@ -68,7 +86,7 @@ async def chat_with_context(question: str,
 
     user_content = f"Context from monitored websites:\n\n{context}\n\n---\n\nQuestion: {question}"
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -127,7 +145,7 @@ async def generate_source_summary(source: dict, content_rows: list[dict]) -> str
         f"Scraped content:\n\n{context}"
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -195,7 +213,7 @@ async def generate_comparison(sources: list[dict]) -> dict:
         "}"
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -242,7 +260,7 @@ async def generate_competitor_changes(
         "}"
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -299,7 +317,7 @@ async def generate_news_digest(articles: list[dict]) -> dict:
         "Identify 3-5 themes. Be factual and grounded in the content provided. Do not speculate."
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -383,7 +401,7 @@ async def generate_gtm_heatmap(competitors: list[dict], own_company: dict | None
         "Produce one cell entry per segment × competitor combination."
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -448,7 +466,7 @@ async def generate_positioning_teardown(competitors: list[dict], own_company: di
         "If a field cannot be determined from the content, use null. Include ALL competitors."
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -525,7 +543,7 @@ async def generate_campaign_messaging(competitors: list[dict], own_company: dict
         "pr-thought-leadership / PR & Thought Leadership."
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -591,7 +609,7 @@ async def generate_positioning_canvas(competitors: list[dict], own_company: dict
         "Include every company provided. Base placements on evidence in the content, not assumptions."
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -652,7 +670,7 @@ async def generate_feature_matrix(competitors: list[dict], own_company: dict | N
         "Produce one cell entry for every feature x company combination."
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -711,7 +729,7 @@ async def generate_kano_analysis(competitors: list[dict], own_company: dict | No
         "not generic assumptions."
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -775,7 +793,7 @@ async def generate_messaging_house(competitors: list[dict], own_company: dict | 
         f"=== Competitive landscape (for differentiation context only) ===\n\n{comp_context}"
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -832,7 +850,7 @@ async def generate_battlecards(competitors: list[dict], own_company: dict | None
         "Produce 3-4 items per list, per competitor. Include every competitor provided."
     )
 
-    response = await _get_client().chat.completions.create(
+    response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
