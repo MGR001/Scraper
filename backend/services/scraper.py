@@ -401,7 +401,10 @@ def _parse_feed_xml(xml_text: str) -> list[dict]:
     return articles
 
 
-async def _scrape_feed(source_id: str, feed_url: str, session_id: str | None = None) -> dict:
+async def _scrape_feed(
+    source_id: str, feed_url: str,
+    session_id: str | None = None, workspace_id: str | None = None,
+) -> dict:
     """Fetch an RSS/Atom feed and store each article as content chunks."""
     from ..scrape_status import set_status
 
@@ -426,7 +429,7 @@ async def _scrape_feed(source_id: str, feed_url: str, session_id: str | None = N
         try:
             new = await _store_content_chunks(
                 source_id, article["url"], article["title"], article["content"],
-                session_id=session_id,
+                session_id=session_id, workspace_id=workspace_id,
             )
             total_new += new
         except Exception as exc:
@@ -482,6 +485,7 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
     session_row = await asyncio.to_thread(
         lambda: db.table("scrape_sessions").insert({
             "source_id": source_id,
+            "workspace_id": workspace_id,
             "started_at": session_started_at,
         }).execute()
     )
@@ -489,7 +493,7 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
 
     # Fast path: URL is explicitly a feed (RSS/Atom)
     if _is_feed_url(base_url):
-        result = await _scrape_feed(source_id, base_url, session_id=session_id)
+        result = await _scrape_feed(source_id, base_url, session_id=session_id, workspace_id=workspace_id)
         if session_id:
             await asyncio.to_thread(
                 lambda: db.table("scrape_sessions").update({
@@ -574,7 +578,8 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
                 title, content = extract_content(html)
                 if len(content) >= 50:
                     stored = await _store_content_chunks(
-                        source_id, url, title, content, session_id=session_id
+                        source_id, url, title, content,
+                        session_id=session_id, workspace_id=workspace_id,
                     )
                     total_stored += stored
 
