@@ -11,7 +11,8 @@
     if (name === 'competitors') { loadCompetitors(); startStatusPolling(); }
     if (name === 'news')        loadNews();
     if (name === 'settings')    loadSettings();
-    if (name === 'chat')        loadCompetitorChanges();
+    if (name === 'changes')     loadCompetitorChanges();
+    if (name === 'chat')        loadPositioningCanvas();
   }
 
   // ── Supabase auth ─────────────────────────────────────────
@@ -1062,7 +1063,7 @@
 
   // ── Insights tabs ──────────────────────────────────────
   function showInsightsTab(tab) {
-    ['changes', 'canvas', 'matrix', 'kano'].forEach(t => {
+    ['canvas', 'matrix', 'kano'].forEach(t => {
       document.getElementById('ins-sub-' + t).classList.toggle('hidden', t !== tab);
       const btn = document.querySelector('[data-ins-tab="' + t + '"]');
       btn.classList.toggle('active', t === tab);
