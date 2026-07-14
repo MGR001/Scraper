@@ -1068,6 +1068,9 @@
       btn.classList.toggle('active', t === tab);
       btn.setAttribute('aria-selected', t === tab ? 'true' : 'false');
     });
+    if (tab === 'canvas') loadPositioningCanvas();
+    if (tab === 'matrix') loadFeatureMatrix();
+    if (tab === 'kano')   loadKanoAnalysis();
   }
 
   // ── Competitor change detection ───────────────────────
@@ -1211,6 +1214,197 @@
     } catch (_) {
       ta.select();
     }
+  }
+
+  // ── Positioning Canvas ───────────────────────────────
+  let _canvasData = null;
+
+  async function loadPositioningCanvas(force = false) {
+    const btn     = document.getElementById('canvas-refresh-btn');
+    const content = document.getElementById('canvas-content');
+    if (_canvasData && !force) { renderPositioningCanvas(_canvasData); return; }
+    btn.disabled = true;
+    content.innerHTML = '<p class="text-slate-400 text-sm animate-pulse">Mapping the competitive landscape…</p>';
+    try {
+      const data = await api('/api/insights/positioning-canvas');
+      _canvasData = data;
+      renderPositioningCanvas(data);
+    } catch (e) {
+      content.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderPositioningCanvas(data) {
+    const content = document.getElementById('canvas-content');
+    const companies = data.companies || [];
+    const xa = data.x_axis || {};
+    const ya = data.y_axis || {};
+    if (!companies.length) {
+      content.innerHTML = '<p class="text-slate-500 text-sm">No positioning data yet.</p>';
+      return;
+    }
+    const dots = companies.map(c => {
+      const left = Math.max(3, Math.min(97, c.x));
+      const bottom = Math.max(3, Math.min(97, c.y));
+      const own = c.is_own;
+      return `<div class="absolute flex flex-col items-center gap-1 z-10" style="left:${left}%; bottom:${bottom}%; transform:translate(-50%, 50%)" title="${esc(c.rationale || '')}">
+        <span class="w-3 h-3 rounded-full shrink-0 border-2 border-white shadow ${own ? 'bg-orange-500' : 'bg-blue-500'}"></span>
+        <span class="text-[11px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded border shadow-sm ${own ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-white text-slate-800 border-border'}">${esc(c.name)}</span>
+      </div>`;
+    }).join('');
+
+    content.innerHTML = `
+      <div class="bg-card border border-border rounded-xl p-6">
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Y-axis &middot; ${esc(ya.label || '')}</p>
+        <p class="text-xs text-slate-400 mb-4">${esc(ya.low || '')} (bottom) &rarr; ${esc(ya.high || '')} (top)</p>
+        <div class="relative mx-auto bg-surface border border-border rounded-lg" style="width:100%; max-width:640px; aspect-ratio:1/1;">
+          <div class="absolute left-1/2 top-0 bottom-0 w-px bg-border"></div>
+          <div class="absolute top-1/2 left-0 right-0 h-px bg-border"></div>
+          ${dots}
+        </div>
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-4 mb-1">X-axis &middot; ${esc(xa.label || '')}</p>
+        <p class="text-xs text-slate-400">${esc(xa.low || '')} (left) &rarr; ${esc(xa.high || '')} (right)</p>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-3 mt-4">
+        ${companies.map(c => `
+          <div class="bg-card border border-border rounded-lg p-3 flex items-start gap-2">
+            <span class="w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${c.is_own ? 'bg-orange-500' : 'bg-blue-500'}"></span>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-slate-900">${esc(c.name)}${c.is_own ? ' <span class="text-[10px] font-normal text-orange-600">(you)</span>' : ''}</p>
+              <p class="text-xs text-slate-500 mt-0.5">${esc(c.rationale || '')}</p>
+            </div>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  // ── Feature / Claim Comparison Matrix ─────────────────
+  let _matrixData = null;
+
+  async function loadFeatureMatrix(force = false) {
+    const btn     = document.getElementById('matrix-refresh-btn');
+    const content = document.getElementById('matrix-content');
+    if (_matrixData && !force) { renderFeatureMatrix(_matrixData); return; }
+    btn.disabled = true;
+    content.innerHTML = '<p class="text-slate-400 text-sm animate-pulse">Comparing feature claims…</p>';
+    try {
+      const data = await api('/api/insights/feature-matrix');
+      _matrixData = data;
+      renderFeatureMatrix(data);
+    } catch (e) {
+      content.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderFeatureMatrix(data) {
+    const content = document.getElementById('matrix-content');
+    const features = data.features || [];
+    const companies = data.companies || [];
+    if (!features.length || !companies.length) {
+      content.innerHTML = '<p class="text-slate-500 text-sm">No feature comparison data yet.</p>';
+      return;
+    }
+    const cellMap = {};
+    (data.cells || []).forEach(c => { cellMap[c.feature + '::' + c.company] = c; });
+
+    const STATUS = {
+      yes:     { icon: '✓', cls: 'text-emerald-600 bg-emerald-50' },
+      partial: { icon: '~', cls: 'text-amber-600 bg-amber-50' },
+      no:      { icon: '—', cls: 'text-slate-300' },
+    };
+
+    const headerCols = companies.map(name =>
+      `<th class="px-3 py-2.5 text-center text-xs font-semibold text-slate-700 border-b border-border min-w-[110px]">${esc(name)}</th>`
+    ).join('');
+
+    const rows = features.map(feature => {
+      const cells = companies.map(company => {
+        const cell = cellMap[feature + '::' + company] || { status: 'no' };
+        const s = STATUS[cell.status] || STATUS.no;
+        return `<td class="px-3 py-2.5 text-center border-b border-border/60 ${s.cls}" title="${esc(cell.evidence || '')}">
+          <span class="font-bold">${s.icon}</span>
+        </td>`;
+      }).join('');
+      return `<tr>
+        <td class="px-3 py-2.5 text-sm text-slate-800 border-b border-border/60 border-r border-border/60 sticky left-0 bg-card whitespace-nowrap">${esc(feature)}</td>
+        ${cells}
+      </tr>`;
+    }).join('');
+
+    content.innerHTML = `
+      <div class="overflow-x-auto rounded-lg border border-border">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead><tr>
+            <th class="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 border-b border-border sticky left-0 bg-card">Feature / Claim</th>
+            ${headerCols}
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="flex items-center gap-4 mt-3 text-xs text-slate-500">
+        <span><span class="font-bold text-emerald-600">✓</span> Yes</span>
+        <span><span class="font-bold text-amber-600">~</span> Partial</span>
+        <span><span class="font-bold text-slate-300">—</span> No / not mentioned</span>
+      </div>`;
+  }
+
+  // ── Kano-style Aspect Analysis ─────────────────────────
+  let _kanoData = null;
+
+  async function loadKanoAnalysis(force = false) {
+    const btn     = document.getElementById('kano-refresh-btn');
+    const content = document.getElementById('kano-content');
+    if (_kanoData && !force) { renderKanoAnalysis(_kanoData); return; }
+    btn.disabled = true;
+    content.innerHTML = '<p class="text-slate-400 text-sm animate-pulse">Classifying product aspects…</p>';
+    try {
+      const data = await api('/api/insights/kano-analysis');
+      _kanoData = data;
+      renderKanoAnalysis(data);
+    } catch (e) {
+      content.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderKanoAnalysis(data) {
+    const content = document.getElementById('kano-content');
+    const aspects = data.aspects || [];
+    if (!aspects.length) {
+      content.innerHTML = '<p class="text-slate-500 text-sm">No Kano analysis data yet.</p>';
+      return;
+    }
+    const GROUPS = [
+      { key: 'must-be',     title: 'Must-be',     sub: 'Baseline — expected by every buyer',         border: 'border-slate-300',  text: 'text-slate-600' },
+      { key: 'performance', title: 'Performance', sub: 'More-is-better — where they differentiate',  border: 'border-blue-300',   text: 'text-blue-600' },
+      { key: 'delighter',   title: 'Delighter',   sub: 'Exciters — rare, unexpected wins',            border: 'border-violet-300', text: 'text-violet-600' },
+    ];
+
+    const cols = GROUPS.map(g => {
+      const items = aspects.filter(a => a.category === g.key);
+      const cards = items.map(a => `
+        <div class="bg-card border border-border rounded-lg p-3.5">
+          <p class="text-sm font-semibold text-slate-900">${esc(a.name)}</p>
+          <p class="text-xs text-slate-500 mt-1 leading-relaxed">${esc(a.rationale || '')}</p>
+          <div class="flex flex-wrap gap-1 mt-2">
+            ${(a.offered_by || []).map(name => `<span class="text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">${esc(name)}</span>`).join('')}
+          </div>
+        </div>`).join('') || '<p class="text-xs text-slate-400">None identified.</p>';
+      return `
+        <div>
+          <div class="border-t-2 ${g.border} pt-2 mb-3">
+            <p class="text-sm font-bold ${g.text}">${g.title}</p>
+            <p class="text-xs text-slate-400">${g.sub}</p>
+          </div>
+          <div class="space-y-2.5">${cards}</div>
+        </div>`;
+    }).join('');
+
+    content.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">${cols}</div>`;
   }
 
   // ── GTM Heatmap ─────────────────────────────────────

@@ -639,18 +639,54 @@
     </div>
 
     <!-- Positioning Canvas tab -->
-    <div id="ins-sub-canvas" class="hidden p-5">
-      <p class="text-slate-500 text-sm">Positioning canvas — coming soon.</p>
+    <div id="ins-sub-canvas" class="hidden">
+      <div class="px-5 pt-4 flex items-center justify-between gap-4">
+        <p class="text-sm text-slate-400">Where each competitor sits on the two dimensions that matter most in this market.</p>
+        <button onclick="loadPositioningCanvas(true)" id="canvas-refresh-btn"
+          class="flex items-center gap-1.5 text-xs bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 px-3 py-2 rounded-lg transition shrink-0 border border-slate-200">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+      <div id="canvas-content" class="p-5">
+        <p class="text-slate-500 text-sm">Loading…</p>
+      </div>
     </div>
 
     <!-- Feature Comparison tab -->
-    <div id="ins-sub-matrix" class="hidden p-5">
-      <p class="text-slate-500 text-sm">Feature/claim comparison matrix — coming soon.</p>
+    <div id="ins-sub-matrix" class="hidden">
+      <div class="px-5 pt-4 flex items-center justify-between gap-4">
+        <p class="text-sm text-slate-400">Which claimed features and capabilities each competitor actually offers.</p>
+        <button onclick="loadFeatureMatrix(true)" id="matrix-refresh-btn"
+          class="flex items-center gap-1.5 text-xs bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 px-3 py-2 rounded-lg transition shrink-0 border border-slate-200">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+      <div id="matrix-content" class="p-5">
+        <p class="text-slate-500 text-sm">Loading…</p>
+      </div>
     </div>
 
     <!-- Kano Analysis tab -->
-    <div id="ins-sub-kano" class="hidden p-5">
-      <p class="text-slate-500 text-sm">Kano-style aspect analysis — coming soon.</p>
+    <div id="ins-sub-kano" class="hidden">
+      <div class="px-5 pt-4 flex items-center justify-between gap-4">
+        <p class="text-sm text-slate-400">Which aspects are baseline expectations, performance differentiators, or delighters in this market.</p>
+        <button onclick="loadKanoAnalysis(true)" id="kano-refresh-btn"
+          class="flex items-center gap-1.5 text-xs bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 px-3 py-2 rounded-lg transition shrink-0 border border-slate-200">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+      <div id="kano-content" class="p-5">
+        <p class="text-slate-500 text-sm">Loading…</p>
+      </div>
     </div>
   </div>
 

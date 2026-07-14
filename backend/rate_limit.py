@@ -10,12 +10,15 @@ from fastapi import HTTPException
 _counters: dict[str, dict[str, tuple[int, float]]] = defaultdict(dict)
 
 LIMITS: dict[str, int] = {
-    "chat":        20,   # per hour
-    "comparison":   5,
-    "gtm_heatmap":  5,
-    "positioning":  5,
-    "messaging":    5,
-    "news_digest": 10,
+    "chat":              20,   # per hour
+    "comparison":         5,
+    "gtm_heatmap":        5,
+    "positioning":        5,
+    "messaging":          5,
+    "news_digest":       10,
+    "positioning_canvas": 5,
+    "feature_matrix":     5,
+    "kano_analysis":      5,
 }
 WINDOW_SECONDS = 3600  # 1 hour
 

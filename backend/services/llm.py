@@ -548,3 +548,192 @@ async def generate_campaign_messaging(competitors: list[dict], own_company: dict
     except Exception:
         logger.error("Campaign messaging JSON parse failed: %s", raw[:200])
         return {}
+
+
+async def generate_positioning_canvas(competitors: list[dict], own_company: dict | None = None) -> dict:
+    """
+    Plot each company on a 2-axis positioning canvas. The model chooses whichever
+    two dimensions are most differentiating for this specific market based on the
+    scraped content, then places each company (0-100 on each axis) with a rationale.
+    """
+    import json as _json
+
+    all_entries = ([own_company] if own_company else []) + competitors
+    parts = [
+        f"## {'YOUR COMPANY: ' if own_company and c is own_company else ''}{c['name']} ({c['url']})\n{c['content_summary']}"
+        for c in all_entries
+    ]
+    context = "\n\n---\n\n".join(parts)
+
+    own_note = (
+        f"The first company ('YOUR COMPANY: {own_company['name']}') is the user's own company — "
+        "set is_own=true for it only.\n"
+        if own_company else ""
+    )
+
+    system_prompt = (
+        "You are a positioning strategist building a 2x2 positioning canvas (a classic strategy "
+        "quadrant map). " + own_note +
+        "Analyse the website content below and:\n"
+        "1. Choose the TWO dimensions that most differentiate these companies from each other "
+        "(e.g. 'Price' vs 'Ease of setup', 'Breadth of platform' vs 'Depth of specialization', "
+        "'Self-serve' vs 'Enterprise / high-touch' — pick whatever is genuinely most revealing for "
+        "THIS market rather than defaulting to generic axes).\n"
+        "2. For each axis, give a short label and what the low and high ends mean.\n"
+        "3. Place every company on both axes using a 0-100 scale, with a one-sentence rationale "
+        "grounded in the content.\n"
+        "Return ONLY valid JSON with no markdown fences. Schema:\n"
+        "{\n"
+        "  \"x_axis\": { \"label\": \"<axis name>\", \"low\": \"<what 0 means>\", \"high\": \"<what 100 means>\" },\n"
+        "  \"y_axis\": { \"label\": \"<axis name>\", \"low\": \"<what 0 means>\", \"high\": \"<what 100 means>\" },\n"
+        "  \"companies\": [\n"
+        "    {\n"
+        "      \"name\": \"<exact company name>\",\n"
+        "      \"is_own\": <true|false>,\n"
+        "      \"x\": <0-100>,\n"
+        "      \"y\": <0-100>,\n"
+        "      \"rationale\": \"<one sentence grounding the placement in the content>\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Include every company provided. Base placements on evidence in the content, not assumptions."
+    )
+
+    response = await _get_client().chat.completions.create(
+        model=settings.chat_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Competitor content:\n\n{context}"},
+        ],
+        temperature=0.25,
+        max_tokens=1500,
+        response_format={"type": "json_object"},
+    )
+    raw = response.choices[0].message.content or "{}"
+    try:
+        return _json.loads(raw)
+    except Exception:
+        logger.error("Positioning canvas JSON parse failed: %s", raw[:200])
+        return {}
+
+
+async def generate_feature_matrix(competitors: list[dict], own_company: dict | None = None) -> dict:
+    """
+    Extract a canonical list of features/claims mentioned across the companies'
+    content, then mark each company's status (yes/partial/no) for each one.
+    """
+    import json as _json
+
+    all_entries = ([own_company] if own_company else []) + competitors
+    parts = [
+        f"## {'YOUR COMPANY: ' if own_company and c is own_company else ''}{c['name']} ({c['url']})\n{c['content_summary']}"
+        for c in all_entries
+    ]
+    context = "\n\n---\n\n".join(parts)
+    company_names = [c["name"] for c in all_entries]
+
+    system_prompt = (
+        "You are a competitive analyst building a feature/claim comparison matrix. "
+        "Analyse the website content below and:\n"
+        "1. Identify 8-14 distinct features or claims that appear across these companies "
+        "(product capabilities, integrations, guarantees, certifications, pricing-model traits, "
+        "etc.) — only include ones that are genuinely comparable across multiple companies.\n"
+        "2. For every feature, mark each company's status:\n"
+        "   'yes'     — clearly claimed/offered\n"
+        "   'partial' — offered in a limited form, or implied but not explicit\n"
+        "   'no'      — not mentioned / not offered\n"
+        "3. Where status is 'yes' or 'partial', include a short supporting quote or paraphrase as "
+        "evidence.\n"
+        "Return ONLY valid JSON with no markdown fences. Schema:\n"
+        "{\n"
+        "  \"features\": [ \"<feature name, short>\" ],\n"
+        "  \"companies\": [ \"<exact company name, in the order given>\" ],\n"
+        "  \"cells\": [\n"
+        "    {\n"
+        "      \"feature\": \"<feature name — must match one in features[]>\",\n"
+        "      \"company\": \"<company name — must match one in companies[]>\",\n"
+        "      \"status\": \"<yes|partial|no>\",\n"
+        "      \"evidence\": \"<short quote/paraphrase, or null if status is 'no'>\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        f"Companies, in order: {', '.join(company_names)}. "
+        "Produce one cell entry for every feature x company combination."
+    )
+
+    response = await _get_client().chat.completions.create(
+        model=settings.chat_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Competitor content:\n\n{context}"},
+        ],
+        temperature=0.2,
+        max_tokens=3000,
+        response_format={"type": "json_object"},
+    )
+    raw = response.choices[0].message.content or "{}"
+    try:
+        return _json.loads(raw)
+    except Exception:
+        logger.error("Feature matrix JSON parse failed: %s", raw[:200])
+        return {}
+
+
+async def generate_kano_analysis(competitors: list[dict], own_company: dict | None = None) -> dict:
+    """
+    Classify product aspects found across the market into Kano categories:
+    must-be (baseline expected), performance (more-is-better), delighter (exciter).
+    """
+    import json as _json
+
+    all_entries = ([own_company] if own_company else []) + competitors
+    parts = [
+        f"## {'YOUR COMPANY: ' if own_company and c is own_company else ''}{c['name']} ({c['url']})\n{c['content_summary']}"
+        for c in all_entries
+    ]
+    context = "\n\n---\n\n".join(parts)
+
+    system_prompt = (
+        "You are a product strategist applying the Kano model to a competitive market. "
+        "Analyse the website content below and:\n"
+        "1. Identify 8-14 distinct product aspects/features present across these companies.\n"
+        "2. Classify each into exactly one Kano category:\n"
+        "   'must-be'     — baseline/expected; nearly every company offers it; its absence would "
+        "be disqualifying\n"
+        "   'performance' — more-is-better; companies differentiate on how much/how well they do it\n"
+        "   'delighter'   — an exciter; rare, unexpected, offered by few or one company; not "
+        "expected by buyers\n"
+        "3. For each aspect, list which companies (exact names) offer/emphasise it, and a "
+        "one-sentence rationale for the classification.\n"
+        "Return ONLY valid JSON with no markdown fences. Schema:\n"
+        "{\n"
+        "  \"aspects\": [\n"
+        "    {\n"
+        "      \"name\": \"<aspect/feature name, short>\",\n"
+        "      \"category\": \"<must-be|performance|delighter>\",\n"
+        "      \"rationale\": \"<one sentence grounding the classification in the content>\",\n"
+        "      \"offered_by\": [ \"<company name>\" ]\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Base classification on how the aspect actually appears across THIS set of companies "
+        "(e.g. something every company has is 'must-be' regardless of how impressive it sounds), "
+        "not generic assumptions."
+    )
+
+    response = await _get_client().chat.completions.create(
+        model=settings.chat_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Competitor content:\n\n{context}"},
+        ],
+        temperature=0.25,
+        max_tokens=2500,
+        response_format={"type": "json_object"},
+    )
+    raw = response.choices[0].message.content or "{}"
+    try:
+        return _json.loads(raw)
+    except Exception:
+        logger.error("Kano analysis JSON parse failed: %s", raw[:200])
+        return {}
