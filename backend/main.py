@@ -40,21 +40,26 @@ async def health():
     return {"ok": True}
 
 
+_NO_CACHE = {"Cache-Control": "no-cache"}
+
+
 @app.get("/", include_in_schema=False)
 async def home():
-    return FileResponse(os.path.join(_FRONTEND, "home.html"))
+    return FileResponse(os.path.join(_FRONTEND, "home.html"), headers=_NO_CACHE)
 
 
 @app.get("/login", include_in_schema=False)
 async def login_page():
-    return FileResponse(os.path.join(_FRONTEND, "login.html"))
+    return FileResponse(os.path.join(_FRONTEND, "login.html"), headers=_NO_CACHE)
 
 
 @app.get("/app", include_in_schema=False)
 async def app_page():
-    return FileResponse(os.path.join(_FRONTEND, "index.html"))
+    return FileResponse(os.path.join(_FRONTEND, "index.html"), headers=_NO_CACHE)
 
 
 @app.get("/app.js", include_in_schema=False)
 async def app_js():
-    return FileResponse(os.path.join(_FRONTEND, "app.js"), media_type="application/javascript")
+    return FileResponse(
+        os.path.join(_FRONTEND, "app.js"), media_type="application/javascript", headers=_NO_CACHE
+    )
