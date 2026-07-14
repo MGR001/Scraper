@@ -154,6 +154,7 @@
 
       // Coverage by category
       const cats = {
+        own:        {count:0, chunks:0, pages:0},
         competitor: {count:0, chunks:0, pages:0},
         news:       {count:0, chunks:0, pages:0},
         market:     {count:0, chunks:0, pages:0},
@@ -164,7 +165,7 @@
         c.count++; c.chunks += s.chunks_stored || 0; c.pages += s.pages_scraped || 0;
       });
       const maxChunks = Math.max(...Object.values(cats).map(c => c.chunks), 1);
-      const catColor = { competitor:'bg-violet-500', news:'bg-sky-500', market:'bg-emerald-500', general:'bg-slate-400' };
+      const catColor = { own:'bg-orange-500', competitor:'bg-violet-500', news:'bg-sky-500', market:'bg-emerald-500', general:'bg-slate-400' };
       document.getElementById('coverage-list').innerHTML = Object.entries(cats).map(([cat, d]) => {
         const pct    = Math.round((d.chunks / maxChunks) * 100);
         const chunks = d.chunks >= 1000 ? `${(d.chunks/1000).toFixed(1)}k` : d.chunks;
@@ -174,7 +175,7 @@
               ${badgeHtml(cat)}
               <span class="text-xs text-slate-500">${d.count} source${d.count!==1?'s':''} &middot; ${d.pages} pages</span>
             </div>
-            <span class="text-xs text-white font-semibold">${chunks} chunks</span>
+            <span class="text-xs text-slate-700 font-semibold">${chunks} chunks</span>
           </div>
           <div class="bg-surface rounded-full h-1.5">
             <div class="${catColor[cat]} rounded-full h-1.5" style="width:${Math.max(pct,2)}%"></div>
@@ -192,7 +193,7 @@
         const newCount = (st.state === 'completed' && st.new_chunks > 0) ? st.new_chunks : 0;
         return `<div class="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
           <span class="status-dot status-${cfg.cls}" title="${cfg.label}"></span>
-          <span class="text-sm text-slate-200 flex-1 min-w-0 truncate">${esc(s.name)}</span>
+          <span class="text-sm text-slate-800 flex-1 min-w-0 truncate">${esc(s.name)}</span>
           ${badgeHtml(s.category)}
           <span class="text-xs ${fc} shrink-0">${relTime(s.last_scraped_at)}</span>
           ${newCount > 0 ? `<span class="text-xs font-semibold text-emerald-400 shrink-0">+${newCount} new</span>` : ''}
@@ -236,7 +237,7 @@
         return `<div class="chunk-item bg-card border border-border rounded-xl p-4 flex items-start justify-between gap-3"
              onclick="viewChunk('${c.id}')" title="Click to view full content">
           <div class="min-w-0 flex-1">
-            <p class="font-medium text-white text-sm truncate">${esc(c.title || 'Untitled')}</p>
+            <p class="font-medium text-slate-900 text-sm truncate">${esc(c.title || 'Untitled')}</p>
             <p class="text-xs text-slate-400 mt-0.5 truncate">${esc(c.url)}</p>
           </div>
           <div class="flex flex-col items-end gap-1.5 shrink-0">
@@ -269,7 +270,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
           </svg>
           <div class="min-w-0">
-            <p class="text-sm text-slate-200 group-hover:text-blue-300 truncate transition">${esc(u.title || u.url)}</p>
+            <p class="text-sm text-slate-800 group-hover:text-blue-300 truncate transition">${esc(u.title || u.url)}</p>
             <p class="text-xs text-slate-500 truncate">${esc(u.url)}</p>
           </div>
           <span class="text-xs text-slate-600 shrink-0 ml-auto">${fmtDate(u.scraped_at)}</span>
@@ -412,7 +413,7 @@
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2.5">
               <span id="status-badge-${s.id}" class="status-dot status-${cfg.cls}" title="${cfg.label}"></span>
-              <span class="font-semibold text-white">${esc(s.name)}</span>
+              <span class="font-semibold text-slate-900">${esc(s.name)}</span>
               ${badgeHtml(s.category)}
               ${newChunks > 0 ? `<span id="new-chunks-badge-${s.id}" class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" title="New chunks from last scrape">↑ +${newChunks} new</span>` : `<span id="new-chunks-badge-${s.id}" class="hidden"></span>`}
             </div>
@@ -431,7 +432,7 @@
             </button>
           </div>
         </div>
-        <div id="summary-${s.id}" class="p-5 text-sm text-slate-300 leading-relaxed">
+        <div id="summary-${s.id}" class="p-5 text-sm text-slate-700 leading-relaxed">
           ${hasSummary
             ? `<div class="prose-answer">${mdToHtml(s.summary)}</div>`
             : `<p class="text-slate-500 italic">${s.chunks_stored > 0
@@ -529,7 +530,7 @@
     ).join('') || '—';
 
     const bullets = arr => (arr || []).map(s =>
-      `<li class="flex items-start gap-1.5 text-sm text-slate-300"><span class="text-slate-500 mt-0.5">•</span>${esc(s)}</li>`
+      `<li class="flex items-start gap-1.5 text-sm text-slate-700"><span class="text-slate-500 mt-0.5">•</span>${esc(s)}</li>`
     ).join('');
 
     // ── Section groups ───────────────────────────────────
@@ -537,16 +538,16 @@
       {
         label: 'POSITIONING',
         rows: [
-          { label: 'Positioning',       render: c => `<span class="text-slate-200">${esc(c.positioning)}</span>` },
-          { label: 'Target Market',     render: c => `<span class="text-slate-300">${esc(c.target_market)}</span>` },
-          { label: 'Value Proposition', render: c => `<span class="text-blue-300">${esc(c.value_proposition)}</span>` },
+          { label: 'Positioning',       render: c => `<span class="text-slate-800">${esc(c.positioning)}</span>` },
+          { label: 'Target Market',     render: c => `<span class="text-slate-700">${esc(c.target_market)}</span>` },
+          { label: 'Value Proposition', render: c => `<span class="text-blue-700">${esc(c.value_proposition)}</span>` },
         ],
       },
       {
         label: 'PRODUCTS & SERVICES',
         rows: [
           { label: 'Key Products',      render: c => pills(c.key_products) },
-          { label: 'Differentiator',    render: c => `<span class="text-indigo-300">${esc(c.key_differentiator)}</span>` },
+          { label: 'Differentiator',    render: c => `<span class="text-indigo-700">${esc(c.key_differentiator)}</span>` },
           { label: 'Strengths',         render: c => `<ul class="space-y-1">${bullets(c.strengths)}</ul>` },
         ],
       },
@@ -563,7 +564,7 @@
         label: 'KEY FINDINGS',
         rows: [
           { label: 'Key Findings', render: c => `<ol class="space-y-1.5">${(c.key_findings||[]).map((f,i) =>
-            `<li class="flex items-start gap-2 text-sm text-slate-300"><span class="shrink-0 text-slate-500 tabular-nums">${i+1}.</span>${esc(f)}</li>`
+            `<li class="flex items-start gap-2 text-sm text-slate-700"><span class="shrink-0 text-slate-500 tabular-nums">${i+1}.</span>${esc(f)}</li>`
           ).join('')}</ol>` },
         ],
       },
@@ -573,7 +574,7 @@
     const dimW = 'w-36';
 
     const headerCols = competitors.map(c =>
-      `<th class="px-4 py-3 text-left text-white font-semibold text-sm ${colW} border-b border-border bg-surface/50">${esc(c.name)}</th>`
+      `<th class="px-4 py-3 text-left text-slate-900 font-semibold text-sm ${colW} border-b border-border bg-surface/50">${esc(c.name)}</th>`
     ).join('');
 
     const tableBody = groups.map(g => {
@@ -597,8 +598,8 @@
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           ${uniqueness.map(u => `
             <div class="bg-surface/30 border border-border/50 rounded-xl p-4">
-              <p class="text-xs font-semibold text-indigo-300 mb-1.5">${esc(u.name)}</p>
-              <p class="text-sm text-slate-300 leading-relaxed">${esc(u.unique_angle)}</p>
+              <p class="text-xs font-semibold text-indigo-700 mb-1.5">${esc(u.name)}</p>
+              <p class="text-sm text-slate-700 leading-relaxed">${esc(u.unique_angle)}</p>
             </div>`).join('')}
         </div>
       </div>` : '';
@@ -609,15 +610,15 @@
         <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Strategic Implications</p>
         <ol class="space-y-2.5">
           ${strategic_implications.map((imp, i) => `
-            <li class="flex items-start gap-3 text-sm text-slate-300">
-              <span class="shrink-0 w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-300 text-xs flex items-center justify-center font-bold mt-0.5">${i + 1}</span>
+            <li class="flex items-start gap-3 text-sm text-slate-700">
+              <span class="shrink-0 w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-700 text-xs flex items-center justify-center font-bold mt-0.5">${i + 1}</span>
               <span>${esc(imp)}</span>
             </li>`).join('')}
         </ol>
       </div>` : '';
 
     body.innerHTML = `
-      ${strategic_context ? `<p class="text-sm text-slate-300 leading-relaxed border-l-2 border-indigo-500 pl-3 mb-5">${esc(strategic_context)}</p>` : ''}
+      ${strategic_context ? `<p class="text-sm text-slate-700 leading-relaxed border-l-2 border-indigo-500 pl-3 mb-5">${esc(strategic_context)}</p>` : ''}
       <div class="overflow-x-auto rounded-lg border border-border/50">
         <table class="w-full text-left border-collapse text-sm">
           <thead>
@@ -691,21 +692,21 @@
           class="text-xs text-blue-400 hover:text-blue-300 hover:underline truncate block">${esc(a.title || a.url)}</a>`)
         .join('');
       return `<div class="border border-border rounded-lg p-3.5">
-        <p class="text-xs font-semibold text-slate-300 uppercase tracking-wide mb-1.5">${esc(t.theme)}</p>
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">${esc(t.theme)}</p>
         <p class="text-sm text-slate-400 leading-relaxed mb-2">${esc(t.summary)}</p>
         ${links ? `<div class="space-y-0.5 mt-2 border-t border-border pt-2">${links}</div>` : ''}
       </div>`;
     }).join('');
     document.getElementById('news-digest').innerHTML = `
       <div class="mb-4">
-        <p class="text-sm font-semibold text-white mb-1">${esc(digest.headline)}</p>
+        <p class="text-sm font-semibold text-slate-900 mb-1">${esc(digest.headline)}</p>
         <p class="text-sm text-slate-400 leading-relaxed">${esc(digest.overview)}</p>
       </div>
       ${themesHtml ? `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">${themesHtml}</div>` : ''}
       ${digest.strategic_takeaway ? `
       <div class="bg-blue-950/30 border border-blue-800/30 rounded-lg px-4 py-3">
         <p class="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-1">Strategic Takeaway</p>
-        <p class="text-sm text-slate-300">${esc(digest.strategic_takeaway)}</p>
+        <p class="text-sm text-slate-700">${esc(digest.strategic_takeaway)}</p>
       </div>` : ''}`;
   }
 
@@ -740,7 +741,7 @@
               <span class="text-xs text-slate-600 ml-auto shrink-0">${fmtDate(item.scraped_at)}</span>
             </div>
             <a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer"
-               class="font-medium text-white text-sm hover:text-blue-300 transition block mb-1 line-clamp-2">
+               class="font-medium text-slate-900 text-sm hover:text-blue-300 transition block mb-1 line-clamp-2">
               ${esc(item.title || item.url)}
             </a>
             <p class="text-xs text-slate-500 truncate mb-2">${esc(item.url)}</p>
@@ -774,9 +775,9 @@
       const totalChunks = sources.reduce((a, s) => a + (s.chunks_stored || 0), 0);
       const totalPages  = sources.reduce((a, s) => a + (s.pages_scraped || 0), 0);
       statsEl.innerHTML = [
-        { label: 'Sources',       value: sources.length,             color: 'text-orange-400' },
-        { label: 'Pages indexed', value: totalPages.toLocaleString(), color: 'text-slate-200'  },
-        { label: 'Chunks stored', value: totalChunks.toLocaleString(),color: 'text-slate-200'  },
+        { label: 'Sources',       value: sources.length,             color: 'text-orange-600' },
+        { label: 'Pages indexed', value: totalPages.toLocaleString(), color: 'text-slate-900'  },
+        { label: 'Chunks stored', value: totalChunks.toLocaleString(),color: 'text-slate-900'  },
       ].map(s => `<div class="bg-card border border-border rounded-xl p-4 text-center">
         <p class="text-2xl font-bold ${s.color}">${s.value}</p>
         <p class="text-xs text-slate-500 mt-1">${s.label}</p>
@@ -792,7 +793,7 @@
         return `<div class="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-0.5">
-              <span class="font-semibold text-white text-sm">${esc(s.name)}</span>
+              <span class="font-semibold text-slate-900 text-sm">${esc(s.name)}</span>
               ${badgeHtml(s.category)}
               ${s.is_active ? '' : '<span class="badge badge-general">paused</span>'}
             </div>
@@ -896,7 +897,7 @@
         <div class="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-0.5">
-              <span class="font-semibold text-white text-sm">${esc(s.name)}</span>
+              <span class="font-semibold text-slate-900 text-sm">${esc(s.name)}</span>
               ${badgeHtml(s.category)}
               ${s.is_active ? '' : '<span class="badge badge-general">paused</span>'}
             </div>
@@ -1098,7 +1099,7 @@
           }</span>` : '';
       const changesHtml = (r.changes || []).length
         ? `<ul class="mt-2 space-y-1">${r.changes.map(c =>
-            `<li class="flex items-start gap-1.5 text-xs text-amber-300"><span class="mt-1 shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400"></span>${esc(c)}</li>`
+            `<li class="flex items-start gap-1.5 text-xs text-amber-700"><span class="mt-1 shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400"></span>${esc(c)}</li>`
           ).join('')}</ul>` : '';
       const stableHtml = (r.stable || []).length
         ? `<ul class="mt-1 space-y-0.5">${r.stable.map(s =>
@@ -1107,7 +1108,7 @@
       return `<div class="bg-surface border border-border rounded-xl p-4">
         <div class="flex items-center gap-2 mb-1">
           <span class="w-2 h-2 rounded-full ${dot} shrink-0"></span>
-          <span class="font-semibold text-white text-sm">${esc(r.name)}</span>
+          <span class="font-semibold text-slate-900 text-sm">${esc(r.name)}</span>
           <span class="text-xs ${labelCol} ml-auto">${label}</span>
         </div>
         ${scrapeInfo ? `<div class="mb-2">${scrapeInfo}</div>` : ''}
@@ -1117,7 +1118,7 @@
     }).join('');
     content.innerHTML = `
       <div class="flex items-center justify-between mb-3">
-        <h3 class="font-semibold text-white text-sm">Competitor Change Analysis <span class="text-xs font-normal text-slate-500">(last 7 days vs previous 30 days)</span></h3>
+        <h3 class="font-semibold text-slate-900 text-sm">Competitor Change Analysis <span class="text-xs font-normal text-slate-500">(last 7 days vs previous 30 days)</span></h3>
         <div class="flex items-center gap-3">
           <button onclick="exportChanges()" class="text-xs text-slate-400 hover:text-blue-400 transition">Export</button>
           <button onclick="loadCompetitorChanges()" class="text-xs text-slate-400 hover:text-blue-400 transition">Hide</button>
@@ -1285,7 +1286,7 @@
 
       const nameTd = document.createElement('td');
       nameTd.className = 'px-4 py-3 sticky left-0 bg-surface z-10 border-r border-border/30 align-top';
-      nameTd.innerHTML = '<div class="font-medium text-slate-200 text-sm leading-snug">' + esc(seg.name) + '</div>' +
+      nameTd.innerHTML = '<div class="font-medium text-slate-900 text-sm leading-snug">' + esc(seg.name) + '</div>' +
         (seg.description ? '<div class="text-xs text-slate-500 mt-0.5 max-w-xs leading-snug">' + esc(seg.description) + '</div>' : '');
       tr.appendChild(nameTd);
 
@@ -1338,11 +1339,11 @@
         '<span class="text-xs ' + accentCls + ' px-2 py-0.5 rounded-full border">' + esc(s) + '</span>'
       ).join('');
       const acts = (cfg.actions||[]).map(a =>
-        '<li class="flex items-start gap-2 text-xs text-slate-300"><span class="mt-1 shrink-0 w-1.5 h-1.5 rounded-full ' + dotCls + '"></span>' + esc(a) + '</li>'
+        '<li class="flex items-start gap-2 text-xs text-slate-700"><span class="mt-1 shrink-0 w-1.5 h-1.5 rounded-full ' + dotCls + '"></span>' + esc(a) + '</li>'
       ).join('');
       document.getElementById(id).innerHTML =
         '<div class="flex items-start gap-3 mb-3">' + iconHtml +
-        '<div><p class="text-sm font-semibold text-white leading-snug">' + esc(cfg.headline||'No recommendation.') + '</p></div></div>' +
+        '<div><p class="text-sm font-semibold text-slate-900 leading-snug">' + esc(cfg.headline||'No recommendation.') + '</p></div></div>' +
         (segs ? '<div class="flex flex-wrap gap-1.5 mb-3">' + segs + '</div>' : '') +
         (cfg.rationale ? '<p class="text-sm text-slate-400 leading-relaxed mb-3">' + esc(cfg.rationale) + '</p>' : '') +
         (acts ? '<ul class="space-y-1.5">' + acts + '</ul>' : '');
@@ -1496,8 +1497,8 @@
     // Strategic summary
     const summaryEl = document.getElementById('cm-summary');
     summaryEl.innerHTML = data.strategic_summary
-      ? '<p class="text-sm text-blue-200 leading-relaxed">'
-        + '<span class="font-semibold text-blue-300 mr-1.5">Strategic opportunity:</span>'
+      ? '<p class="text-sm text-blue-900 leading-relaxed">'
+        + '<span class="font-semibold text-blue-700 mr-1.5">Strategic opportunity:</span>'
         + esc(data.strategic_summary) + '</p>'
       : '';
 
@@ -1719,7 +1720,7 @@
         <input type="url" placeholder="https://competitor.com" value="${_esc(r.url)}"
           class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           oninput="_obUpdateRival(${i},'url',this.value)"/>
-        ${rivals.length > 1 ? `<button onclick="_obRemoveRival(${i})" class="text-slate-300 hover:text-red-400 transition pt-2">✕</button>` : ''}
+        ${rivals.length > 1 ? `<button onclick="_obRemoveRival(${i})" class="text-slate-400 hover:text-red-500 transition pt-2">✕</button>` : ''}
       </div>`).join('');
     document.getElementById('ob-body').innerHTML = `
       <div class="space-y-3">
