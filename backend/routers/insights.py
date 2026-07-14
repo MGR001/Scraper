@@ -12,6 +12,38 @@ from ..services.llm import chat_with_context, generate_source_summary, generate_
 router = APIRouter()
 
 
+async def _combine_own_company(db, workspace_id: str, build_content, max_chars: int = 2000) -> dict | None:
+    """
+    A workspace's own company can span multiple 'own'-category sources (main
+    site, docs, blog, etc.) — combine content from ALL of them into one
+    representative entry instead of only using the first source found.
+    """
+    own_res = await asyncio.to_thread(
+        lambda: db.table("sources")
+        .select("id, name, url")
+        .eq("workspace_id", workspace_id)
+        .eq("is_active", True)
+        .eq("category", "own")
+        .execute()
+    )
+    own_sources = own_res.data or []
+    if not own_sources:
+        return None
+
+    per_source_chars = max(400, max_chars // len(own_sources))
+    parts = []
+    for src in own_sources:
+        chunk = await build_content(src, max_chars=per_source_chars)
+        if chunk and chunk != "No content scraped yet.":
+            parts.append(f"### {src['name']} ({src['url']})\n{chunk}")
+
+    return {
+        "name": own_sources[0]["name"],
+        "url": own_sources[0]["url"],
+        "content_summary": "\n\n".join(parts) or "No content scraped yet.",
+    }
+
+
 @router.post("/chat")
 async def chat(message: ChatMessage, ws: WorkspaceContext = Depends(get_workspace)):
     """Ask a strategy question; GPT-4o answers using your scraped content."""
@@ -215,22 +247,7 @@ async def gtm_heatmap(ws: WorkspaceContext = Depends(get_workspace)):
         })
 
     # Include own company as baseline reference if available
-    own_res = await asyncio.to_thread(
-        lambda: db.table("sources")
-        .select("id, name, url")
-        .eq("workspace_id", ws.workspace_id)
-        .eq("is_active", True)
-        .eq("category", "own")
-        .execute()
-    )
-    own_company = None
-    if own_res.data:
-        src = own_res.data[0]
-        own_company = {
-            "name": src["name"],
-            "url": src["url"],
-            "content_summary": await _build_content(src),
-        }
+    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
 
     result = await generate_gtm_heatmap(competitors_data, own_company=own_company)
     # Flag own company competitor so frontend can highlight it
@@ -291,22 +308,7 @@ async def positioning_teardown(ws: WorkspaceContext = Depends(get_workspace)):
         })
 
     # Include own company as the reference baseline if available
-    own_res = await asyncio.to_thread(
-        lambda: db.table("sources")
-        .select("id, name, url")
-        .eq("workspace_id", ws.workspace_id)
-        .eq("is_active", True)
-        .eq("category", "own")
-        .execute()
-    )
-    own_company = None
-    if own_res.data:
-        src = own_res.data[0]
-        own_company = {
-            "name": src["name"],
-            "url": src["url"],
-            "content_summary": await _build_content(src),
-        }
+    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
 
     return await generate_positioning_teardown(competitors_data, own_company=own_company)
 
@@ -360,22 +362,7 @@ async def positioning_canvas(ws: WorkspaceContext = Depends(get_workspace)):
             "content_summary": await _build_content(src),
         })
 
-    own_res = await asyncio.to_thread(
-        lambda: db.table("sources")
-        .select("id, name, url")
-        .eq("workspace_id", ws.workspace_id)
-        .eq("is_active", True)
-        .eq("category", "own")
-        .execute()
-    )
-    own_company = None
-    if own_res.data:
-        src = own_res.data[0]
-        own_company = {
-            "name": src["name"],
-            "url": src["url"],
-            "content_summary": await _build_content(src),
-        }
+    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
 
     return await generate_positioning_canvas(competitors_data, own_company=own_company)
 
@@ -429,22 +416,7 @@ async def feature_matrix(ws: WorkspaceContext = Depends(get_workspace)):
             "content_summary": await _build_content(src),
         })
 
-    own_res = await asyncio.to_thread(
-        lambda: db.table("sources")
-        .select("id, name, url")
-        .eq("workspace_id", ws.workspace_id)
-        .eq("is_active", True)
-        .eq("category", "own")
-        .execute()
-    )
-    own_company = None
-    if own_res.data:
-        src = own_res.data[0]
-        own_company = {
-            "name": src["name"],
-            "url": src["url"],
-            "content_summary": await _build_content(src),
-        }
+    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
 
     return await generate_feature_matrix(competitors_data, own_company=own_company)
 
@@ -498,22 +470,7 @@ async def kano_analysis(ws: WorkspaceContext = Depends(get_workspace)):
             "content_summary": await _build_content(src),
         })
 
-    own_res = await asyncio.to_thread(
-        lambda: db.table("sources")
-        .select("id, name, url")
-        .eq("workspace_id", ws.workspace_id)
-        .eq("is_active", True)
-        .eq("category", "own")
-        .execute()
-    )
-    own_company = None
-    if own_res.data:
-        src = own_res.data[0]
-        own_company = {
-            "name": src["name"],
-            "url": src["url"],
-            "content_summary": await _build_content(src),
-        }
+    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
 
     return await generate_kano_analysis(competitors_data, own_company=own_company)
 
@@ -567,21 +524,6 @@ async def campaign_messaging(ws: WorkspaceContext = Depends(get_workspace)):
             "content_summary": await _build_content(src),
         })
 
-    own_res = await asyncio.to_thread(
-        lambda: db.table("sources")
-        .select("id, name, url")
-        .eq("workspace_id", ws.workspace_id)
-        .eq("is_active", True)
-        .eq("category", "own")
-        .execute()
-    )
-    own_company = None
-    if own_res.data:
-        src = own_res.data[0]
-        own_company = {
-            "name": src["name"],
-            "url": src["url"],
-            "content_summary": await _build_content(src),
-        }
+    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
 
     return await generate_campaign_messaging(competitors_data, own_company=own_company)
