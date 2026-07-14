@@ -299,7 +299,7 @@
         <div id="add-url-status" class="text-sm mb-3 hidden"></div>
         <div class="flex gap-3 justify-end">
           <button onclick="closeAddUrlModal()"
-            class="text-sm text-slate-400 hover:text-white px-4 py-2 rounded-lg transition border border-border hover:border-slate-500">
+            class="text-sm text-slate-400 hover:text-slate-900 px-4 py-2 rounded-lg transition border border-border hover:border-slate-500">
             Cancel
           </button>
           <button id="add-url-submit" onclick="submitAddUrl()"
@@ -451,12 +451,12 @@
       <h2 class="text-base font-semibold mb-4">Add Company Source</h2>
       <form id="add-own-form" onsubmit="addOwnSource(event)" class="grid sm:grid-cols-2 gap-3">
         <input id="own-src-name" type="text" placeholder="Name (e.g. Our Website)" required
-          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
+          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
         <input id="own-src-url" type="url" placeholder="https://yourcompany.com" required
-          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
+          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
         <div class="flex items-center gap-2">
           <input id="own-src-interval" type="number" min="1" max="168" value="24" placeholder="Interval (hrs)"
-            class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500"/>
+            class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
           <span class="text-xs text-slate-400 whitespace-nowrap">hrs</span>
         </div>
         <div class="flex items-center gap-3">
@@ -500,11 +500,11 @@
       <h2 class="text-base font-semibold mb-4">Add Source</h2>
       <form id="add-source-form" onsubmit="addSource(event)" class="grid sm:grid-cols-2 gap-3">
         <input id="src-name" type="text" placeholder="Name (e.g. TechCrunch)" required
-          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
         <input id="src-url" type="url" placeholder="https://example.com" required
-          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
         <select id="src-category"
-          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="general">General</option>
           <option value="competitor">Competitor</option>
           <option value="news">News</option>
@@ -513,7 +513,7 @@
         </select>
         <div class="flex items-center gap-2">
           <input id="src-interval" type="number" min="1" max="168" value="24" placeholder="Interval (hrs)"
-            class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+            class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
           <span class="text-xs text-slate-400 whitespace-nowrap">hrs</span>
         </div>
         <div class="sm:col-span-2 flex items-center gap-3">
