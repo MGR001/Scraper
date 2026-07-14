@@ -20,8 +20,9 @@ async def lifespan(app: FastAPI):
     start_scheduler()
     yield
     stop_scheduler()
-    from .services.scraper import close_http_client
+    from .services.scraper import close_http_client, close_browser
     await close_http_client()
+    await close_browser()
 
 
 app = FastAPI(title="RIvals", lifespan=lifespan)

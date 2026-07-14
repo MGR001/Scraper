@@ -47,6 +47,54 @@ async def close_http_client() -> None:
         _http_client = None
 
 
+# Shared headless browser — lazy-launched on first use, closed in lifespan shutdown.
+# Used as a fallback for pages that render their content client-side via JS, where a
+# plain HTTP fetch only gets back an empty shell.
+_playwright = None
+_browser = None
+
+
+async def get_browser():
+    global _playwright, _browser
+    if _browser is None or not _browser.is_connected():
+        from playwright.async_api import async_playwright
+        if _playwright is None:
+            _playwright = await async_playwright().start()
+        _browser = await _playwright.chromium.launch(headless=True)
+    return _browser
+
+
+async def close_browser() -> None:
+    global _playwright, _browser
+    if _browser is not None:
+        await _browser.close()
+        _browser = None
+    if _playwright is not None:
+        await _playwright.stop()
+        _playwright = None
+
+
+async def fetch_page_with_browser(url: str, timeout: int = 30) -> str:
+    """Render a page in a real (headless) browser and return the resulting HTML.
+
+    For sites whose content is populated by client-side JavaScript rather than
+    present in the initial HTML response. Uses the same browser identity as the
+    plain HTTP fetcher (_HEADERS) — no automation-fingerprint evasion.
+    """
+    browser = await get_browser()
+    context = await browser.new_context(
+        user_agent=_HEADERS["User-Agent"],
+        viewport={"width": 1280, "height": 900},
+    )
+    try:
+        page = await context.new_page()
+        await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+        await page.wait_for_timeout(1500)  # let client-side rendering settle
+        return await page.content()
+    finally:
+        await context.close()
+
+
 def validate_url(url: str) -> None:
     """Raise ValueError if the URL could be an SSRF vector."""
     parsed = urlparse(url)
@@ -563,7 +611,26 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
             logger.info("[%d/%d] Crawling %s", pages_crawled + 1, max_pages, url)
 
             try:
-                html = await fetch_page(url)
+                try:
+                    html = await fetch_page(url)
+                    title, content = extract_content(html)
+                except Exception as fetch_exc:
+                    # Plain fetch failed outright — try a real browser render in
+                    # case the site requires JS (this will not help against sites
+                    # that are actively blocking automated requests).
+                    logger.debug("Plain fetch failed for %s (%s); trying browser render", url, fetch_exc)
+                    html = await fetch_page_with_browser(url)
+                    title, content = extract_content(html)
+
+                if len(content) < 50:
+                    # Likely a client-side-rendered shell — retry with a real browser.
+                    try:
+                        browser_html = await fetch_page_with_browser(url)
+                        b_title, b_content = extract_content(browser_html)
+                        if len(b_content) > len(content):
+                            html, title, content = browser_html, b_title, b_content
+                    except Exception as browser_exc:
+                        logger.debug("Browser fallback fetch failed for %s: %s", url, browser_exc)
 
                 # Enqueue new same-domain links discovered on this page
                 for link in extract_links(html, url):
@@ -575,7 +642,6 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
                         visited.add(link)
                         queue.append(link)
 
-                title, content = extract_content(html)
                 if len(content) >= 50:
                     stored = await _store_content_chunks(
                         source_id, url, title, content,

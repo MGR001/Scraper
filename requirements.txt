@@ -7,3 +7,4 @@ beautifulsoup4>=4.12.3
 python-dotenv>=1.0.1
 pydantic-settings>=2.3.0
 lxml>=5.2.2
+playwright>=1.45.0
