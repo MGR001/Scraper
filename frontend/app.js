@@ -652,11 +652,44 @@
       const items = await api(`/api/scraper/news?${params}`);
       _newsItems  = reset ? items : [..._newsItems, ...items];
       _newsOffset += items.length;
-      renderNewsItems(_newsItems);
+      renderNewsSourcePills();
+      applyNewsFilters();
       document.getElementById('news-load-more').classList.toggle('hidden', items.length < _newsLimit);
     } catch (e) {
       feed.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
     }
+  }
+
+  // ── News source filter ────────────────────────────────
+  let _newsSourcesSelected = null;  // null = show all sources
+
+  function renderNewsSourcePills() {
+    const el = document.getElementById('news-source-pills');
+    const bySource = new Map();
+    _newsItems.forEach(item => {
+      if (!bySource.has(item.source_id)) bySource.set(item.source_id, item.source_name || 'Unknown');
+    });
+    if (bySource.size < 2) { el.innerHTML = ''; return; }
+
+    const allActive = _newsSourcesSelected === null;
+    const pills = [`<button onclick="toggleNewsSourceFilter(null)" class="news-cat-btn${allActive ? ' active' : ''}">All sources</button>`];
+    for (const [sourceId, name] of bySource) {
+      const active = !allActive && _newsSourcesSelected.has(sourceId);
+      pills.push(`<button onclick="toggleNewsSourceFilter('${sourceId}')" class="news-cat-btn${active ? ' active' : ''}">${esc(name)}</button>`);
+    }
+    el.innerHTML = pills.join('');
+  }
+
+  function toggleNewsSourceFilter(sourceId) {
+    if (sourceId === null) {
+      _newsSourcesSelected = null;
+    } else {
+      const current = new Set(_newsSourcesSelected || []);
+      if (current.has(sourceId)) current.delete(sourceId); else current.add(sourceId);
+      _newsSourcesSelected = current.size ? current : null;
+    }
+    renderNewsSourcePills();
+    applyNewsFilters();
   }
 
   async function loadNewsDigest() {
@@ -712,15 +745,21 @@
       </div>` : ''}`;
   }
 
-  function filterNews() {
+  function applyNewsFilters() {
     const q = document.getElementById('news-search').value.trim().toLowerCase();
-    if (!q) { renderNewsItems(_newsItems); return; }
-    renderNewsItems(_newsItems.filter(item =>
-      (item.title       || '').toLowerCase().includes(q) ||
-      (item.url         || '').toLowerCase().includes(q) ||
-      (item.snippet     || '').toLowerCase().includes(q) ||
-      (item.source_name || '').toLowerCase().includes(q)
-    ), true);
+    let items = _newsItems;
+    if (_newsSourcesSelected) {
+      items = items.filter(item => _newsSourcesSelected.has(item.source_id));
+    }
+    if (q) {
+      items = items.filter(item =>
+        (item.title       || '').toLowerCase().includes(q) ||
+        (item.url         || '').toLowerCase().includes(q) ||
+        (item.snippet     || '').toLowerCase().includes(q) ||
+        (item.source_name || '').toLowerCase().includes(q)
+      );
+    }
+    renderNewsItems(items, !!(q || _newsSourcesSelected));
   }
 
   function renderNewsItems(items, filtered = false) {
