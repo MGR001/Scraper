@@ -38,7 +38,8 @@ async def run_scrape(source_id: str, background_tasks: BackgroundTasks,
             raise HTTPException(409, "A scrape is already running for this source.")
 
     background_tasks.add_task(scrape_source, source_id, source["url"],
-                              workspace_id=ws.workspace_id)
+                              workspace_id=ws.workspace_id,
+                              crawl_scope=source.get("crawl_scope", "domain"))
     return {"message": f"Scrape started for '{source['name']}'. Checking sitemap…"}
 
 
@@ -53,7 +54,8 @@ async def run_all_scrapes(background_tasks: BackgroundTasks,
     )
     for source in result.data:
         background_tasks.add_task(scrape_source, source["id"], source["url"],
-                                  workspace_id=ws.workspace_id)
+                                  workspace_id=ws.workspace_id,
+                                  crawl_scope=source.get("crawl_scope", "domain"))
     return {"message": f"Started scraping {len(result.data)} sources (sitemap-aware)."}
 
 

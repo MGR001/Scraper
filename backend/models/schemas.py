@@ -8,6 +8,7 @@ class SourceCreate(BaseModel):
     url: str
     category: str = "general"   # competitor | news | market | general
     scrape_interval: int = 24   # hours
+    crawl_scope: str = "domain"  # domain | path
 
 
 class SourceUpdate(BaseModel):
@@ -16,6 +17,7 @@ class SourceUpdate(BaseModel):
     category: Optional[str] = None
     scrape_interval: Optional[int] = None
     is_active: Optional[bool] = None
+    crawl_scope: Optional[str] = None
 
 
 class ChatMessage(BaseModel):

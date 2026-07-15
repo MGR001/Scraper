@@ -354,6 +354,15 @@
               class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
           </div>
         </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1">Crawl scope</label>
+          <select id="edit-src-scope"
+            class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            title="Whole domain: follow links anywhere on the site. Same section only: stay under this URL's path.">
+            <option value="domain">Whole domain</option>
+            <option value="path">Same section only (URL path)</option>
+          </select>
+        </div>
         <p id="edit-src-status" class="text-sm hidden"></p>
         <div class="flex gap-3 justify-end pt-1">
           <button onclick="closeEditSourceModal()"
@@ -517,6 +526,14 @@
             class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
           <span class="text-xs text-slate-400 whitespace-nowrap">hrs</span>
         </div>
+        <div>
+          <select id="own-src-scope"
+            class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            title="Whole domain: follow links anywhere on the site. Same section only: stay under this URL's path.">
+            <option value="domain">Crawl: whole domain</option>
+            <option value="path">Crawl: same section only (URL path)</option>
+          </select>
+        </div>
         <div class="flex items-center gap-3">
           <button type="submit" class="bg-orange-600 hover:bg-orange-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition">
             Add Source
@@ -574,6 +591,12 @@
             class="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
           <span class="text-xs text-slate-400 whitespace-nowrap">hrs</span>
         </div>
+        <select id="src-scope"
+          class="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          title="Whole domain: follow links anywhere on the site. Same section only: stay under this URL's path.">
+          <option value="domain">Crawl: whole domain</option>
+          <option value="path">Crawl: same section only (URL path)</option>
+        </select>
         <div class="sm:col-span-2 flex items-center gap-3">
           <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition">
             Add Source

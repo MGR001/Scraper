@@ -500,13 +500,20 @@ async def _scrape_feed(
 
 
 async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
-                        workspace_id: str | None = None) -> dict:
+                        workspace_id: str | None = None,
+                        crawl_scope: str = "domain") -> dict:
     """
     Full crawl for a source:
       1. Discover seed URLs from sitemap (if available).
       2. BFS-follow same-domain links found on every crawled page.
       3. Falls back to base URL only if no sitemap exists.
     Stops when max_pages is reached.
+
+    crawl_scope:
+      'domain' — follow links anywhere on the same domain (default).
+      'path'   — only follow links whose path stays under base_url's
+                 path prefix, e.g. base https://site.com/a/b only
+                 allows /a/b and /a/b/... , not /a/c or /other.
     """
     from ..scrape_status import get_status, set_status
 
@@ -554,8 +561,16 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
             )
         return result
 
-    logger.info("Starting crawl for %s (max %d pages)", base_url, max_pages)
+    logger.info("Starting crawl for %s (max %d pages, scope=%s)", base_url, max_pages, crawl_scope)
     base_parsed = urlparse(base_url)
+    base_path = base_parsed.path.rstrip("/")
+
+    def _path_in_scope(url: str) -> bool:
+        if crawl_scope != "path":
+            return True
+        p = urlparse(url).path.rstrip("/")
+        return p == base_path or p.startswith(base_path + "/")
+
     set_status(source_id, "running", "Discovering sitemap…")
 
     total_stored = 0
@@ -568,6 +583,8 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
     try:
         # ── Step 1: Sitemap seeds ─────────────────────────────────────────────
         sitemap_urls = await discover_sitemap_urls(base_url, max_urls=max_pages)
+        if crawl_scope == "path":
+            sitemap_urls = [u for u in sitemap_urls if _path_in_scope(u)]
         sitemap_found = len(sitemap_urls) > 0
 
         if sitemap_found:
@@ -633,11 +650,12 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
                     except Exception as browser_exc:
                         logger.debug("Browser fallback fetch failed for %s: %s", url, browser_exc)
 
-                # Enqueue new same-domain links discovered on this page
+                # Enqueue new same-domain (and, if scoped, same-path-prefix) links
                 for link in extract_links(html, url):
                     if (
                         link not in visited
                         and urlparse(link).netloc == base_parsed.netloc
+                        and _path_in_scope(link)
                         and len(visited) < max_pages
                     ):
                         visited.add(link)

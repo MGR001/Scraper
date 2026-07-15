@@ -61,6 +61,7 @@ async def _check_and_scrape() -> None:
                     outcome = await scrape_source(
                         source["id"], source["url"],
                         max_pages=max_pages, workspace_id=ws_id,
+                        crawl_scope=source.get("crawl_scope", "domain"),
                     )
                     logger.info("Scheduler scraped '%s' (ws=%s): %s",
                                 source["name"], ws_id, outcome)

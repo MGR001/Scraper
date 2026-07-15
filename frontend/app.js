@@ -855,6 +855,7 @@
           url:              document.getElementById('own-src-url').value.trim(),
           category:         'own',
           scrape_interval:  parseInt(document.getElementById('own-src-interval').value, 10) || 24,
+          crawl_scope:      document.getElementById('own-src-scope').value,
         }),
       });
       document.getElementById('add-own-form').reset();
@@ -982,6 +983,7 @@
           url:              document.getElementById('src-url').value.trim(),
           category:         document.getElementById('src-category').value,
           scrape_interval:  parseInt(document.getElementById('src-interval').value, 10),
+          crawl_scope:      document.getElementById('src-scope').value,
         }),
       });
       document.getElementById('add-source-form').reset();
@@ -1041,6 +1043,7 @@
     document.getElementById('edit-src-url').value = src.url || '';
     document.getElementById('edit-src-category').value = src.category || 'general';
     document.getElementById('edit-src-interval').value = src.scrape_interval || 24;
+    document.getElementById('edit-src-scope').value = src.crawl_scope || 'domain';
     const st = document.getElementById('edit-src-status');
     st.className = 'text-sm hidden';
     st.textContent = '';
@@ -1058,6 +1061,7 @@
     const url      = document.getElementById('edit-src-url').value.trim();
     const category = document.getElementById('edit-src-category').value;
     const interval = parseInt(document.getElementById('edit-src-interval').value, 10);
+    const scope    = document.getElementById('edit-src-scope').value;
     const st       = document.getElementById('edit-src-submit');
     const statusEl = document.getElementById('edit-src-status');
     if (!name || !url) {
@@ -1069,7 +1073,7 @@
     try {
       await api(`/api/sources/${_editSourceId}`, {
         method: 'PUT',
-        body: JSON.stringify({ name, url, category, scrape_interval: interval || 24 }),
+        body: JSON.stringify({ name, url, category, scrape_interval: interval || 24, crawl_scope: scope }),
       });
       closeEditSourceModal();
       showToast('Source updated.');
