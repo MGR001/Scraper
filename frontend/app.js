@@ -187,7 +187,7 @@
 
       // Source health
       const sorted = [...sources].sort((a,b) => (b.last_scraped_at||'').localeCompare(a.last_scraped_at||''));
-      document.getElementById('source-health-list').innerHTML = sorted.slice(0,10).map(s => {
+      document.getElementById('source-health-list').innerHTML = sorted.map(s => {
         const st  = statuses[s.id] || {};
         const cfg = statusConfig(st.state);
         const hrs = s.last_scraped_at ? (Date.now() - new Date(s.last_scraped_at)) / 3600000 : null;
@@ -771,6 +771,7 @@
         api('/api/sources/'),
         api('/api/scraper/status').catch(() => ({})),
       ]);
+      _sourcesCache = all;
       const sources = all.filter(s => s.category === 'own');
 
       // Stats strip
@@ -821,6 +822,10 @@
             <button onclick="scrapeOne('${s.id}', '${esc(s.name)}')"
               class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
               Scrape
+            </button>
+            <button onclick="openEditSourceModal('${s.id}')"
+              class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
+              Edit
             </button>
             <button onclick="toggleSource('${s.id}', ${!s.is_active})"
               class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
@@ -876,6 +881,7 @@
 
   // ── Sources ──────────────────────────────────────────
   let _srcCategory = '';
+  let _sourcesCache = [];
 
   function setSrcCategory(cat) {
     _srcCategory = cat;
@@ -889,6 +895,7 @@
     const el = document.getElementById('sources-table');
     try {
       const all      = await api('/api/sources/');
+      _sourcesCache  = all;
       const sources  = _srcCategory ? all.filter(s => s.category === _srcCategory) : all;
       const statuses = await api('/api/scraper/status').catch(() => ({}));
       if (!sources.length) {
@@ -943,6 +950,10 @@
             <button onclick="scrapeOne('${s.id}', '${esc(s.name)}')"
               class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
               Scrape
+            </button>
+            <button onclick="openEditSourceModal('${s.id}')"
+              class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
+              Edit
             </button>
             <button onclick="toggleSource('${s.id}', ${!s.is_active})"
               class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
@@ -1019,6 +1030,58 @@
 
   // ── Add URL to source ────────────────────────────────
   let _addUrlSourceId = null;
+
+  let _editSourceId = null;
+
+  function openEditSourceModal(sourceId) {
+    const src = _sourcesCache.find(s => s.id === sourceId);
+    if (!src) { showToast('Source not found — try reloading the list.', true); return; }
+    _editSourceId = sourceId;
+    document.getElementById('edit-src-name').value = src.name || '';
+    document.getElementById('edit-src-url').value = src.url || '';
+    document.getElementById('edit-src-category').value = src.category || 'general';
+    document.getElementById('edit-src-interval').value = src.scrape_interval || 24;
+    const st = document.getElementById('edit-src-status');
+    st.className = 'text-sm hidden';
+    st.textContent = '';
+    document.getElementById('edit-src-submit').disabled = false;
+    document.getElementById('edit-source-modal').classList.add('open');
+  }
+
+  function closeEditSourceModal() {
+    document.getElementById('edit-source-modal').classList.remove('open');
+    _editSourceId = null;
+  }
+
+  async function submitEditSource() {
+    const name     = document.getElementById('edit-src-name').value.trim();
+    const url      = document.getElementById('edit-src-url').value.trim();
+    const category = document.getElementById('edit-src-category').value;
+    const interval = parseInt(document.getElementById('edit-src-interval').value, 10);
+    const st       = document.getElementById('edit-src-submit');
+    const statusEl = document.getElementById('edit-src-status');
+    if (!name || !url) {
+      statusEl.className = 'text-sm text-red-500';
+      statusEl.textContent = 'Name and URL are required.';
+      return;
+    }
+    st.disabled = true;
+    try {
+      await api(`/api/sources/${_editSourceId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name, url, category, scrape_interval: interval || 24 }),
+      });
+      closeEditSourceModal();
+      showToast('Source updated.');
+      loadSources();
+      loadOwnSources();
+    } catch (e) {
+      statusEl.className = 'text-sm text-red-500';
+      statusEl.textContent = e.message;
+    } finally {
+      st.disabled = false;
+    }
+  }
 
   function openAddUrlModal(sourceId, sourceName) {
     _addUrlSourceId = sourceId;
