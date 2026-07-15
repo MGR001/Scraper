@@ -647,9 +647,12 @@
     const feed = document.getElementById('news-feed');
     if (reset) feed.innerHTML = '<p class="text-slate-400 text-sm">Loading…</p>';
     try {
-      const params = new URLSearchParams({ limit: _newsLimit, offset: _newsOffset });
-      if (_newsCategory) params.set('category', _newsCategory);
-      const items = await api(`/api/scraper/news?${params}`);
+      const qs = { limit: _newsLimit, offset: _newsOffset };
+      if (_newsCategory) qs.category = _newsCategory;
+      if (_newsSourcesSelected) qs.source_ids = [..._newsSourcesSelected].join(',');
+      const tasks = [api(`/api/scraper/news?${new URLSearchParams(qs)}`)];
+      if (reset) tasks.push(loadNewsSources());
+      const [items] = await Promise.all(tasks);
       _newsItems  = reset ? items : [..._newsItems, ...items];
       _newsOffset += items.length;
       renderNewsSourcePills();
@@ -661,21 +664,27 @@
   }
 
   // ── News source filter ────────────────────────────────
-  let _newsSourcesSelected = null;  // null = show all sources
+  let _newsSources          = [];   // every active source in this category, not just loaded items
+  let _newsSourcesSelected  = null; // null = show all sources
+
+  async function loadNewsSources() {
+    try {
+      const all = await api('/api/sources/');
+      _newsSources = all.filter(s => s.is_active && (!_newsCategory || s.category === _newsCategory));
+    } catch (e) {
+      _newsSources = [];
+    }
+  }
 
   function renderNewsSourcePills() {
     const el = document.getElementById('news-source-pills');
-    const bySource = new Map();
-    _newsItems.forEach(item => {
-      if (!bySource.has(item.source_id)) bySource.set(item.source_id, item.source_name || 'Unknown');
-    });
-    if (bySource.size < 2) { el.innerHTML = ''; return; }
+    if (_newsSources.length < 2) { el.innerHTML = ''; return; }
 
     const allActive = _newsSourcesSelected === null;
     const pills = [`<button onclick="toggleNewsSourceFilter(null)" class="news-cat-btn${allActive ? ' active' : ''}">All sources</button>`];
-    for (const [sourceId, name] of bySource) {
-      const active = !allActive && _newsSourcesSelected.has(sourceId);
-      pills.push(`<button onclick="toggleNewsSourceFilter('${sourceId}')" class="news-cat-btn${active ? ' active' : ''}">${esc(name)}</button>`);
+    for (const src of _newsSources) {
+      const active = !allActive && _newsSourcesSelected.has(src.id);
+      pills.push(`<button onclick="toggleNewsSourceFilter('${src.id}')" class="news-cat-btn${active ? ' active' : ''}">${esc(src.name)}</button>`);
     }
     el.innerHTML = pills.join('');
   }
@@ -688,8 +697,10 @@
       if (current.has(sourceId)) current.delete(sourceId); else current.add(sourceId);
       _newsSourcesSelected = current.size ? current : null;
     }
-    renderNewsSourcePills();
-    applyNewsFilters();
+    // Re-fetch from the server scoped to the selected source(s), rather than
+    // filtering whatever happened to be in the already-loaded page - a
+    // less-recently-scraped source's articles may not be in that page at all.
+    loadNews(true);
   }
 
   async function loadNewsDigest() {

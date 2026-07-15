@@ -190,9 +190,17 @@ async def news_digest(ws: WorkspaceContext = Depends(get_workspace)):
 
 @router.get("/news")
 async def news_feed(limit: int = 40, offset: int = 0, category: str | None = None,
+                    source_ids: str | None = None,
                     ws: WorkspaceContext = Depends(get_workspace)):
-    """Latest scraped pages — one entry per URL, fairly mixed across all sources."""
+    """Latest scraped pages — one entry per URL, fairly mixed across all sources.
+
+    source_ids, if given, is a comma-separated list that restricts results to
+    just those sources — used when the user has selected specific sources to
+    filter by, so results aren't limited to whatever happened to be most
+    recent across ALL sources before the filter was applied.
+    """
     db = get_service_db()
+    wanted_ids = set(source_ids.split(",")) if source_ids else None
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources").select("id, name, category")
@@ -200,7 +208,8 @@ async def news_feed(limit: int = 40, offset: int = 0, category: str | None = Non
     )
     sources = [
         s for s in (sources_res.data or [])
-        if not category or s.get("category") == category
+        if (not category or s.get("category") == category)
+        and (not wanted_ids or s["id"] in wanted_ids)
     ]
     src_map = {s["id"]: s for s in sources}
 
