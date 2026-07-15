@@ -391,6 +391,7 @@ def _is_feed_url(url: str) -> bool:
         or path.endswith(".rss")
         or path.endswith(".xml")
         or "/feeds/" in path
+        or "/rss/" in path
         or "feed=" in url.lower()
     )
 
