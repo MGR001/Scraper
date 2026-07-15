@@ -226,11 +226,15 @@ async def generate_comparison(sources: list[dict]) -> dict:
 
 
 async def generate_competitor_changes(
-    source_name: str, old_chunks: list[str], new_chunks: list[str]
+    source_name: str, old_chunks: list[str], new_chunks: list[str],
+    own_company: dict | None = None,
 ) -> dict:
     """
     Compare old vs recent scraped content chunks for a competitor.
-    Returns {has_changes, summary, changes, stable}.
+    Returns {has_changes, summary, changes, stable}. If own_company is
+    provided, changes are assessed for strategic relevance to it —
+    called out in the summary/changes text, not a separate field, so
+    the response shape stays the same either way.
     """
     import json as _json
 
@@ -245,12 +249,22 @@ async def generate_competitor_changes(
             "stable": [],
         }
 
+    own_note = (
+        f"You also have background on the user's own company, {own_company['name']}, below. "
+        "Where a change is strategically significant relative to that company's positioning, "
+        "pricing, or offering, say so directly in the change description or summary (e.g. "
+        "'undercuts your current pricing' or 'closes a feature gap you don't yet have') — "
+        "don't just describe the change in isolation.\n"
+        if own_company else ""
+    )
+
     system_prompt = (
         "You are a competitive intelligence analyst. "
         "Compare the PREVIOUS and RECENT scraped content from the same competitor website. "
         "Identify meaningful changes: new products or features, pricing changes, messaging shifts, "
         "new partnerships, leadership changes, or structural changes. "
         "Ignore minor cosmetic or navigation differences. "
+        + own_note +
         "Return ONLY valid JSON with this schema:\n"
         "{\n"
         "  \"has_changes\": <true|false>,\n"
@@ -260,18 +274,22 @@ async def generate_competitor_changes(
         "}"
     )
 
+    user_content = (
+        f"## {source_name}\n\n"
+        f"### PREVIOUS CONTENT (older scrape):\n{old_text}\n\n"
+        f"### RECENT CONTENT (latest scrape):\n{new_text}"
+    )
+    if own_company:
+        user_content += (
+            f"\n\n### YOUR COMPANY: {own_company['name']} ({own_company['url']})\n"
+            f"{own_company['content_summary']}"
+        )
+
     response = await _create_completion(
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": (
-                    f"## {source_name}\n\n"
-                    f"### PREVIOUS CONTENT (older scrape):\n{old_text}\n\n"
-                    f"### RECENT CONTENT (latest scrape):\n{new_text}"
-                ),
-            },
+            {"role": "user", "content": user_content},
         ],
         max_completion_tokens=8000,
         response_format={"type": "json_object"},

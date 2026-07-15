@@ -131,6 +131,31 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
     if not sources:
         return {"results": [], "error": "No active competitor sources found."}
 
+    async def _build_own_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
+        content_res = await asyncio.to_thread(
+            lambda sid=src["id"]: db.table("scraped_content")
+            .select("content")
+            .eq("source_id", sid)
+            .order("scraped_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        seen: set[str] = set()
+        parts: list[str] = []
+        total = 0
+        for row in (content_res.data or []):
+            chunk = (row.get("content") or "").strip()
+            if not chunk or chunk in seen:
+                continue
+            seen.add(chunk)
+            parts.append(chunk[:400])
+            total += len(chunk)
+            if total >= max_chars:
+                break
+        return "\n\n".join(parts) or "No content scraped yet."
+
+    own_company = await _combine_own_company(db, ws.workspace_id, _build_own_content)
+
     results = []
     for src in sources:
         # Get the two most recent *finished* scrape sessions for this source
@@ -179,7 +204,7 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
             )
             old_chunks = [r["content"] for r in (old_res.data or []) if r.get("content")]
 
-        change_data = await generate_competitor_changes(src["name"], old_chunks, recent_chunks)
+        change_data = await generate_competitor_changes(src["name"], old_chunks, recent_chunks, own_company=own_company)
         results.append({
             "name": src["name"],
             "url": src["url"],
