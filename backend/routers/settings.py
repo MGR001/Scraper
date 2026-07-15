@@ -43,6 +43,7 @@ class WorkspaceSettings(BaseModel):
     timezone: str | None = None
     crawl_max_pages: int | None = None
     slack_webhook_url: str | None = None
+    feature_matrix_categories: str | None = None
 
 
 @router.patch("/workspace")

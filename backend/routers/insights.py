@@ -443,7 +443,13 @@ async def feature_matrix(ws: WorkspaceContext = Depends(get_workspace)):
 
     own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
 
-    return await generate_feature_matrix(competitors_data, own_company=own_company)
+    ws_res = await asyncio.to_thread(
+        lambda: db.table("workspaces").select("feature_matrix_categories").eq("id", ws.workspace_id).execute()
+    )
+    raw_categories = (ws_res.data or [{}])[0].get("feature_matrix_categories") or ""
+    fixed_categories = [line.strip() for line in raw_categories.splitlines() if line.strip()] or None
+
+    return await generate_feature_matrix(competitors_data, own_company=own_company, fixed_categories=fixed_categories)
 
 
 @router.get("/kano-analysis")

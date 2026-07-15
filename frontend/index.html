@@ -53,8 +53,8 @@
     .badge-general    { background:#64748b15; color:#475569; }
     .badge-own        { background:#ea580c15; color:#c2410c; }
     /* Modal */
-    #chunk-modal, #urls-modal, #add-url-modal, #export-modal, #edit-source-modal { display:none; }
-    #chunk-modal.open, #urls-modal.open, #add-url-modal.open, #export-modal.open, #edit-source-modal.open { display:flex; }
+    #chunk-modal, #urls-modal, #add-url-modal, #export-modal, #edit-source-modal, #feature-categories-modal { display:none; }
+    #chunk-modal.open, #urls-modal.open, #add-url-modal.open, #export-modal.open, #edit-source-modal.open, #feature-categories-modal.open { display:flex; }
     .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
     .status-idle     { background:#cbd5e1; }
     .status-running  { background:#3b82f6; animation: pulse 1s ease-in-out infinite; }
@@ -372,6 +372,38 @@
           <button id="edit-src-submit" onclick="submitEditSource()"
             class="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition">
             Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Feature Comparison Categories Modal ────────────── -->
+  <div id="feature-categories-modal" class="fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target===this)closeFeatureCategoriesModal()">
+    <div class="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl">
+      <div class="flex items-center justify-between gap-4 p-5 border-b border-border">
+        <div>
+          <p class="font-semibold text-slate-900 text-base">Fixed Feature Comparison rows</p>
+          <p class="text-xs text-slate-400 mt-0.5">One per line. These always appear, in this order — the AI may add a few more below them, but won't reshuffle or drop these.</p>
+        </div>
+        <button onclick="closeFeatureCategoriesModal()" class="shrink-0 text-slate-400 hover:text-slate-900 transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="p-5">
+        <textarea id="feature-categories-input" rows="10" placeholder="Leave blank to let the AI choose all rows freely.&#10;e.g.&#10;Legal AI platform or AI support&#10;Targeted at lawyers or legal teams"
+          class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"></textarea>
+        <p id="feature-categories-status" class="text-sm mt-2 hidden"></p>
+        <div class="flex gap-3 justify-end pt-3">
+          <button onclick="closeFeatureCategoriesModal()"
+            class="text-sm text-slate-400 hover:text-slate-900 px-4 py-2 rounded-lg transition border border-border hover:border-slate-500">
+            Cancel
+          </button>
+          <button id="feature-categories-submit" onclick="submitFeatureCategories()"
+            class="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition">
+            Save
           </button>
         </div>
       </div>
@@ -748,13 +780,19 @@
     <div id="ins-sub-matrix" class="hidden">
       <div class="px-5 pt-4 flex items-center justify-between gap-4">
         <p class="text-sm text-slate-400">Which claimed features and capabilities each competitor actually offers.</p>
-        <button onclick="loadFeatureMatrix(true)" id="matrix-refresh-btn"
-          class="flex items-center gap-1.5 text-xs bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 px-3 py-2 rounded-lg transition shrink-0 border border-slate-200">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
-          </svg>
-          Refresh
-        </button>
+        <div class="flex items-center gap-2 shrink-0">
+          <button onclick="openFeatureCategoriesModal()" id="matrix-categories-btn"
+            class="text-xs text-slate-500 hover:text-slate-900 px-3 py-2 rounded-lg transition border border-border hover:border-slate-400">
+            Edit categories
+          </button>
+          <button onclick="loadFeatureMatrix(true)" id="matrix-refresh-btn"
+            class="flex items-center gap-1.5 text-xs bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 px-3 py-2 rounded-lg transition border border-slate-200">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
       <div id="matrix-content" class="p-5">
         <p class="text-slate-500 text-sm">Loading…</p>

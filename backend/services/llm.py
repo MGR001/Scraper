@@ -644,10 +644,18 @@ async def generate_positioning_canvas(competitors: list[dict], own_company: dict
         return {}
 
 
-async def generate_feature_matrix(competitors: list[dict], own_company: dict | None = None) -> dict:
+async def generate_feature_matrix(
+    competitors: list[dict], own_company: dict | None = None,
+    fixed_categories: list[str] | None = None,
+) -> dict:
     """
     Extract a canonical list of features/claims mentioned across the companies'
     content, then mark each company's status (yes/partial/no) for each one.
+
+    If fixed_categories is given, those rows are pinned — they must always
+    appear, with that exact wording, so the matrix stops reshuffling between
+    regenerations. A few additional AI-chosen rows may still be added beyond
+    them; without fixed_categories the whole list is AI-generated as before.
     """
     import json as _json
 
@@ -659,12 +667,28 @@ async def generate_feature_matrix(competitors: list[dict], own_company: dict | N
     context = "\n\n---\n\n".join(parts)
     company_names = [c["name"] for c in all_entries]
 
+    if fixed_categories:
+        fixed_list = "\n".join(f"  - {c}" for c in fixed_categories)
+        category_rule = (
+            "1. The \"features\" array MUST contain exactly these rows, using this exact wording, "
+            "in this exact order — they are fixed and must not be renamed, reworded, merged, split, "
+            "reordered, or omitted, regardless of whether every company has evidence for them:\n"
+            f"{fixed_list}\n"
+            "You may append up to 4 additional rows after them for genuinely comparable features/claims "
+            "you find in the content that aren't already covered above — but the fixed rows always come "
+            "first, unchanged.\n"
+        )
+    else:
+        category_rule = (
+            "1. Identify 8-14 distinct features or claims that appear across these companies "
+            "(product capabilities, integrations, guarantees, certifications, pricing-model traits, "
+            "etc.) — only include ones that are genuinely comparable across multiple companies.\n"
+        )
+
     system_prompt = (
         "You are a competitive analyst building a feature/claim comparison matrix. "
         "Analyse the website content below and:\n"
-        "1. Identify 8-14 distinct features or claims that appear across these companies "
-        "(product capabilities, integrations, guarantees, certifications, pricing-model traits, "
-        "etc.) — only include ones that are genuinely comparable across multiple companies.\n"
+        + category_rule +
         "2. For every feature, mark each company's status:\n"
         "   'yes'     — clearly claimed/offered\n"
         "   'partial' — offered in a limited form, or implied but not explicit\n"

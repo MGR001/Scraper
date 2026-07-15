@@ -1085,6 +1085,48 @@
 
   let _editSourceId = null;
 
+  async function openFeatureCategoriesModal() {
+    const ta = document.getElementById('feature-categories-input');
+    const st = document.getElementById('feature-categories-status');
+    st.className = 'text-sm mt-2 hidden';
+    st.textContent = '';
+    ta.value = '…loading…';
+    document.getElementById('feature-categories-modal').classList.add('open');
+    try {
+      const data = await api('/api/settings');
+      ta.value = (data.workspace && data.workspace.feature_matrix_categories) || '';
+    } catch (e) {
+      ta.value = '';
+      st.className = 'text-sm mt-2 text-red-500';
+      st.textContent = 'Could not load current categories: ' + e.message;
+    }
+  }
+
+  function closeFeatureCategoriesModal() {
+    document.getElementById('feature-categories-modal').classList.remove('open');
+  }
+
+  async function submitFeatureCategories() {
+    const btn = document.getElementById('feature-categories-submit');
+    const st  = document.getElementById('feature-categories-status');
+    const value = document.getElementById('feature-categories-input').value;
+    btn.disabled = true;
+    try {
+      await api('/api/settings/workspace', {
+        method: 'PATCH',
+        body: JSON.stringify({ feature_matrix_categories: value }),
+      });
+      closeFeatureCategoriesModal();
+      showToast('Feature Comparison categories updated.');
+      loadFeatureMatrix(true);
+    } catch (e) {
+      st.className = 'text-sm mt-2 text-red-500';
+      st.textContent = e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   function openEditSourceModal(sourceId) {
     const src = _sourcesCache.find(s => s.id === sourceId);
     if (!src) { showToast('Source not found — try reloading the list.', true); return; }
