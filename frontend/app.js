@@ -323,14 +323,21 @@
     const el = document.getElementById('competitors-list');
     try {
       const all = await api('/api/sources/');
-      const sources = all.filter(s => s.category === 'competitor');
-      if (!sources.length) {
+      const ownSources = all.filter(s => s.category === 'own');
+      const sources    = all.filter(s => s.category === 'competitor');
+      if (!sources.length && !ownSources.length) {
         el.innerHTML = '<p class="text-slate-500 text-sm">No competitor sources yet. Add sources with the "Competitor" category in the Sources tab.</p>';
         return;
       }
       // Fetch current scrape statuses
       const statuses = await api('/api/scraper/status').catch(() => ({}));
-      el.innerHTML = sources.map(s => buildCompetitorCard(s, statuses[s.id])).join('');
+      const ownHtml = ownSources.length ? `
+        <p class="text-xs font-bold text-orange-600 uppercase tracking-widest mb-2">Your Company</p>
+        <div class="space-y-3 mb-6">${ownSources.map(s => buildCompetitorCard(s, statuses[s.id])).join('')}</div>
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Competitors</p>` : '';
+      el.innerHTML = ownHtml + (sources.length
+        ? sources.map(s => buildCompetitorCard(s, statuses[s.id])).join('')
+        : '<p class="text-slate-500 text-sm">No competitor sources yet. Add sources with the "Competitor" category in the Sources tab.</p>');
       startStatusPolling();
     } catch (e) {
       el.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
@@ -575,8 +582,10 @@
     const colW = 'min-w-[220px]';
     const dimW = 'w-36';
 
-    const headerCols = competitors.map(c =>
-      `<th class="px-4 py-3 text-left text-slate-900 font-semibold text-sm ${colW} border-b border-border bg-surface/50">${esc(c.name)}</th>`
+    const headerCols = competitors.map(c => `
+      <th class="px-4 py-3 text-left font-semibold text-sm ${colW} border-b border-border ${c.is_own_company ? 'bg-orange-50 text-orange-700' : 'bg-surface/50 text-slate-900'}">
+        ${esc(c.name)}${c.is_own_company ? ' <span class="text-[10px] font-normal text-orange-600">(you)</span>' : ''}
+      </th>`
     ).join('');
 
     const tableBody = groups.map(g => {
@@ -588,7 +597,7 @@
       const dataRows = g.rows.map(row => `
         <tr class="border-t border-border/40 hover:bg-surface/20 transition-colors">
           <td class="px-4 py-3 text-xs font-semibold text-slate-500 align-top whitespace-nowrap ${dimW} bg-surface/10">${row.label}</td>
-          ${competitors.map(c => `<td class="px-4 py-3 align-top leading-relaxed">${row.render(c)}</td>`).join('')}
+          ${competitors.map(c => `<td class="px-4 py-3 align-top leading-relaxed${c.is_own_company ? ' bg-orange-50/40' : ''}">${row.render(c)}</td>`).join('')}
         </tr>`).join('');
       return groupHeader + dataRows;
     }).join('');
@@ -1484,7 +1493,8 @@
       const cells = companies.map(company => {
         const cell = cellMap[feature + '::' + company] || { status: 'no' };
         const s = STATUS[cell.status] || STATUS.no;
-        return `<td class="px-3 py-2.5 text-center border-b border-border/60 ${s.cls}" title="${esc(cell.evidence || '')}">
+        const tooltip = [cell.evidence, cell.url ? `Source: ${cell.url}` : ''].filter(Boolean).join('\n\n');
+        return `<td class="px-3 py-2.5 text-center border-b border-border/60 ${s.cls} cursor-help" title="${esc(tooltip)}">
           <span class="font-bold">${s.icon}</span>
         </td>`;
       }).join('');
@@ -1991,23 +2001,35 @@
     const empty   = document.getElementById('bc-empty');
     const cards   = data.battlecards || [];
     if (!cards.length) { empty.classList.remove('hidden'); return; }
+    const ownName = data.own_company_name || 'Your company';
 
-    content.innerHTML = cards.map(c => `
+    const header = `
+      <div class="lg:col-span-2 flex items-center gap-2 mb-1">
+        <span class="text-sm font-bold text-blue-700">${esc(ownName)}</span>
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide">vs the competition</span>
+      </div>`;
+
+    const cardsHtml = cards.map(c => `
       <div class="bg-card border border-border rounded-xl overflow-hidden">
         <div class="px-5 py-3.5 border-b border-border bg-surface">
+          <p class="text-xs text-slate-400 mb-0.5"><span class="font-semibold text-blue-700">${esc(ownName)}</span> vs</p>
           <p class="font-bold text-slate-900 text-sm">${esc(c.competitor)}</p>
           <p class="text-xs text-slate-500 mt-0.5">${esc(c.overview || '')}</p>
         </div>
         <div class="p-5 space-y-4">
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <p class="text-[10px] font-bold text-red-600 uppercase tracking-wide mb-1.5">Their strengths</p>
-              <ul class="space-y-1">${(c.their_strengths || []).map(s => `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="text-red-400 mt-0.5">&#9679;</span>${esc(s)}</li>`).join('')}</ul>
+              <p class="text-[10px] font-bold text-blue-600 uppercase tracking-wide mb-1.5">${esc(ownName)} strengths</p>
+              <ul class="space-y-1">${(c.your_strengths || []).map(s => `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="text-blue-400 mt-0.5">&#9679;</span>${esc(s)}</li>`).join('')}</ul>
             </div>
             <div>
-              <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1.5">Their weaknesses</p>
-              <ul class="space-y-1">${(c.their_weaknesses || []).map(s => `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="text-emerald-400 mt-0.5">&#9679;</span>${esc(s)}</li>`).join('')}</ul>
+              <p class="text-[10px] font-bold text-red-600 uppercase tracking-wide mb-1.5">${esc(c.competitor)} strengths</p>
+              <ul class="space-y-1">${(c.their_strengths || []).map(s => `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="text-red-400 mt-0.5">&#9679;</span>${esc(s)}</li>`).join('')}</ul>
             </div>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1.5">${esc(c.competitor)} weaknesses</p>
+            <ul class="space-y-1">${(c.their_weaknesses || []).map(s => `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="text-emerald-400 mt-0.5">&#9679;</span>${esc(s)}</li>`).join('')}</ul>
           </div>
           <div>
             <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Objection handling</p>
@@ -2019,9 +2041,9 @@
                 </div>`).join('')}
             </div>
           </div>
-          <div>
-            <p class="text-[10px] font-bold text-blue-600 uppercase tracking-wide mb-1.5">Why we win</p>
-            <ul class="space-y-1">${(c.why_we_win || []).map(s => `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="text-blue-400 mt-0.5">&#9679;</span>${esc(s)}</li>`).join('')}</ul>
+          <div class="bg-blue-50 border border-blue-100 rounded-lg p-3">
+            <p class="text-[10px] font-bold text-blue-700 uppercase tracking-wide mb-1.5">Why ${esc(ownName)} wins</p>
+            <ul class="space-y-1">${(c.why_we_win || []).map(s => `<li class="text-xs text-slate-700 flex items-start gap-1.5"><span class="text-blue-500 mt-0.5">&#9679;</span>${esc(s)}</li>`).join('')}</ul>
           </div>
           <div>
             <p class="text-[10px] font-bold text-amber-600 uppercase tracking-wide mb-1.5">Landmines to plant</p>
@@ -2029,6 +2051,8 @@
           </div>
         </div>
       </div>`).join('');
+
+    content.innerHTML = header + cardsHtml;
     content.classList.remove('hidden');
   }
 

@@ -90,7 +90,7 @@ async def summarise_source(source_id: str, ws: WorkspaceContext = Depends(get_wo
 
 @router.post("/comparison")
 async def competitive_comparison(ws: WorkspaceContext = Depends(get_workspace)):
-    """Generate a McKinsey-style cross-competitor comparison from existing summaries."""
+    """Generate a McKinsey-style cross-competitor comparison from existing summaries, plus the own company from live content."""
     check_rate_limit(ws.workspace_id, "comparison")
     db = get_service_db()
 
@@ -111,7 +111,39 @@ async def competitive_comparison(ws: WorkspaceContext = Depends(get_workspace)):
             "Generate individual summaries first using \"Generate All\".",
         )
 
-    return await generate_comparison(sources_with_summaries)
+    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
+        content_res = await asyncio.to_thread(
+            lambda sid=src["id"]: db.table("scraped_content")
+            .select("content")
+            .eq("source_id", sid)
+            .order("scraped_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        seen: set[str] = set()
+        parts: list[str] = []
+        total = 0
+        for row in (content_res.data or []):
+            chunk = (row.get("content") or "").strip()
+            if not chunk or chunk in seen:
+                continue
+            seen.add(chunk)
+            parts.append(chunk[:400])
+            total += len(chunk)
+            if total >= max_chars:
+                break
+        return "\n\n".join(parts) or "No content scraped yet."
+
+    # Own company doesn't need a pre-generated summary like competitors do —
+    # pull it from live scraped content so it's always included if present.
+    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+
+    result = await generate_comparison(sources_with_summaries, own_company=own_company)
+    if own_company:
+        for c in result.get("competitors", []):
+            if c.get("name") == own_company["name"]:
+                c["is_own_company"] = True
+    return result
 
 
 @router.get("/competitor-changes")
@@ -411,9 +443,12 @@ async def feature_matrix(ws: WorkspaceContext = Depends(get_workspace)):
         raise HTTPException(400, "No active competitor sources found. Add competitors in the Sources tab first.")
 
     async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
+        # Tag each chunk with the exact page URL it came from (scraped_content.url,
+        # not just the source's root url) so the AI can cite a specific source URL
+        # per feature/company cell for the frontend's evidence hover.
         content_res = await asyncio.to_thread(
             lambda sid=src["id"]: db.table("scraped_content")
-            .select("content")
+            .select("content, url")
             .eq("source_id", sid)
             .order("scraped_at", desc=True)
             .limit(limit)
@@ -427,7 +462,8 @@ async def feature_matrix(ws: WorkspaceContext = Depends(get_workspace)):
             if not chunk or chunk in seen:
                 continue
             seen.add(chunk)
-            parts.append(chunk[:400])
+            chunk_url = row.get("url") or src["url"]
+            parts.append(f"(Source URL: {chunk_url})\n{chunk[:400]}")
             total += len(chunk)
             if total >= max_chars:
                 break
@@ -667,4 +703,6 @@ async def battlecards(ws: WorkspaceContext = Depends(get_workspace)):
     if not own_company:
         raise HTTPException(400, "Add your own company in the My Company tab first.")
 
-    return await generate_battlecards(competitors_data, own_company=own_company)
+    result = await generate_battlecards(competitors_data, own_company=own_company)
+    result["own_company_name"] = own_company["name"]
+    return result

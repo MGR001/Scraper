@@ -156,10 +156,13 @@ async def generate_source_summary(source: dict, content_rows: list[dict]) -> str
     return response.choices[0].message.content or ""
 
 
-async def generate_comparison(sources: list[dict]) -> dict:
+async def generate_comparison(sources: list[dict], own_company: dict | None = None) -> dict:
     """
-    Generate a comprehensive neutral competitive comparison matrix from source summaries.
+    Generate a comprehensive competitive comparison matrix from source summaries.
     Covers all sources passed in; includes GTM, pricing, positioning, and key findings.
+    If own_company is provided, it's included as its own entry in the matrix (marked
+    is_own_company) so the landscape shows where the user's own company sits, not just
+    the competitors.
     """
     import json as _json
 
@@ -171,13 +174,26 @@ async def generate_comparison(sources: list[dict]) -> dict:
     if not parts:
         return {}
 
+    own_note = ""
+    if own_company:
+        parts.append(
+            f"## {own_company['name']} ({own_company['url']}) [THIS IS THE USER'S OWN COMPANY]\n\n"
+            f"{own_company['content_summary']}"
+        )
+        own_note = (
+            f"\nOne of the profiles above, {own_company['name']}, is explicitly marked as the user's own "
+            "company. Include it as its own entry in the 'competitors' array just like the others, but set "
+            f"\"is_own_company\": true for it (and false for every real competitor), so the landscape shows "
+            "where the user's own company sits alongside the competition, not just the competitors."
+        )
+
     context = "\n\n---\n\n".join(parts)
 
     system_prompt = (
         "You are a neutral strategy analyst preparing an executive competitive intelligence briefing. "
         "Your tone is objective and factual — no bias, no winner. "
-        "Analyze ALL competitor profiles provided and return ONLY valid JSON with no markdown fences or commentary. "
-        "Include every competitor in the 'competitors' array. "
+        "Analyze ALL profiles provided and return ONLY valid JSON with no markdown fences or commentary. "
+        "Include every profile in the 'competitors' array." + own_note + " "
         "For fields you cannot determine from the content, use the string \"Unknown\". "
         "Infer GTM motion and pricing model from clues in the content (e.g. 'sign up free', 'contact sales', 'per seat'). "
         "Use this exact JSON schema:\n"
@@ -186,6 +202,7 @@ async def generate_comparison(sources: list[dict]) -> dict:
         "  \"competitors\": [\n"
         "    {\n"
         "      \"name\": \"<exact company name>\",\n"
+        "      \"is_own_company\": <true if this entry is the user's own company, else false>,\n"
         "      \"positioning\": \"<how they position themselves in the market — one sentence>\",\n"
         "      \"target_market\": \"<primary customer segment in 6-10 words>\",\n"
         "      \"key_products\": [\"<product or service 1>\", \"<product or service 2>\", \"<product or service 3>\"],\n"
@@ -217,7 +234,7 @@ async def generate_comparison(sources: list[dict]) -> dict:
         model=settings.chat_model,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Competitor profiles to analyze (include ALL of them):\n\n{context}"},
+            {"role": "user", "content": f"Profiles to analyze (include ALL of them):\n\n{context}"},
         ],
         max_completion_tokens=12000,
         response_format={"type": "json_object"},
@@ -298,17 +315,49 @@ async def generate_competitor_changes(
     return _json.loads(raw)
 
 
+def _round_robin_sample(articles: list[dict], cap: int) -> list[dict]:
+    """
+    Interleave articles across sources (1 from each, repeating) instead of
+    taking a naive most-recent-first prefix, so a high-volume source can't
+    crowd out the rest of a fair 5-day picture. Each source's articles are
+    assumed to already be in recency order; that order is preserved.
+    """
+    by_source: dict[str, list[dict]] = {}
+    for a in articles:
+        by_source.setdefault(a.get("source_name", ""), []).append(a)
+    queues = list(by_source.values())
+    sample: list[dict] = []
+    while queues and len(sample) < cap:
+        still_active = []
+        for q in queues:
+            if q and len(sample) < cap:
+                sample.append(q.pop(0))
+            if q:
+                still_active.append(q)
+        queues = still_active
+    return sample
+
+
 async def generate_news_digest(articles: list[dict]) -> dict:
     """
     Generate an executive 5-day intelligence digest from a list of news articles.
     Returns structured JSON: headline, overview, themes (each with article links), strategic_takeaway.
+    Samples fairly across sources (see _round_robin_sample) rather than just
+    the most-recent N overall, which previously let one high-volume source
+    dominate the digest and starve out everything else in the 5-day window.
     """
     import json as _json
 
+    sample = _round_robin_sample(articles, cap=150)
+
     parts = []
-    for i, a in enumerate(articles[:60], 1):
+    for a in sample:
+        # Use each article's own pre-assigned index (set by the caller across
+        # the FULL article list) so article_indices in the AI's response still
+        # correctly map back to entries the frontend already has, even though
+        # this sample is reordered relative to the original list.
         parts.append(
-            f"[{i}] {a.get('title', '(no title)')}\n"
+            f"[{a['index']}] {a.get('title', '(no title)')}\n"
             f"Source: {a.get('source_name', '')}\n"
             f"URL: {a.get('url', '')}\n"
             f"Snippet: {(a.get('snippet') or '')[:300]}"
@@ -327,11 +376,13 @@ async def generate_news_digest(articles: list[dict]) -> dict:
         "    {\n"
         "      \"theme\": \"<theme title in 4-6 words>\",\n"
         "      \"summary\": \"<2-3 sentence summary of this theme>\",\n"
-        "      \"article_indices\": [<1-based indices of the most relevant articles>]\n"
+        "      \"article_indices\": [<the exact [N] numbers shown before each article you're citing — not sequential, use them as given>]\n"
         "    }\n"
         "  ],\n"
         "  \"strategic_takeaway\": \"<one forward-looking strategic implication>\"\n"
         "}\n\n"
+        "These articles are a fair sample across all monitored sources, not just the most recent overall — "
+        "reflect that spread in your themes rather than skewing toward whichever source appears most. "
         "Identify 3-5 themes. Be factual and grounded in the content provided. Do not speculate."
     )
 
@@ -694,7 +745,10 @@ async def generate_feature_matrix(
         "   'partial' — offered in a limited form, or implied but not explicit\n"
         "   'no'      — not mentioned / not offered\n"
         "3. Where status is 'yes' or 'partial', include a short supporting quote or paraphrase as "
-        "evidence.\n"
+        "evidence, plus the exact source URL it came from.\n"
+        "Each chunk of content below is preceded by a line like '(Source URL: https://...)' — when you "
+        "cite evidence for a cell, copy that exact URL into the cell's 'url' field so the reader can "
+        "click through to where the information was found. Never invent or guess a URL.\n"
         "Return ONLY valid JSON with no markdown fences. Schema:\n"
         "{\n"
         "  \"features\": [ \"<feature name, short>\" ],\n"
@@ -704,7 +758,8 @@ async def generate_feature_matrix(
         "      \"feature\": \"<feature name — must match one in features[]>\",\n"
         "      \"company\": \"<company name — must match one in companies[]>\",\n"
         "      \"status\": \"<yes|partial|no>\",\n"
-        "      \"evidence\": \"<short quote/paraphrase, or null if status is 'no'>\"\n"
+        "      \"evidence\": \"<short quote/paraphrase, or null if status is 'no'>\",\n"
+        "      \"url\": \"<the exact Source URL the evidence was found at, or null if status is 'no'>\"\n"
         "    }\n"
         "  ]\n"
         "}\n\n"
@@ -869,22 +924,27 @@ async def generate_battlecards(competitors: list[dict], own_company: dict | None
     own_name = own_company["name"]
 
     system_prompt = (
-        "You are a sales enablement strategist building competitor battlecards for a sales team.\n"
-        f"The user's own company is {own_name}. Their content:\n{own_company['content_summary']}\n\n"
-        f"For EACH competitor in the content below, produce a battlecard framed entirely from "
-        f"{own_name}'s perspective — 'why we win' means why {own_name} wins.\n"
+        "You are a sales enablement strategist building competitor battlecards for a sales team. "
+        f"Every battlecard is a head-to-head matchup: {own_name} (the user's own company) versus one "
+        f"competitor. Frame everything as {own_name} VS that competitor — never neutral, never from "
+        "the competitor's own point of view.\n"
+        f"{own_name}'s content:\n{own_company['content_summary']}\n\n"
+        f"For EACH competitor in the content below, produce a battlecard. 'why_we_win' and "
+        f"'your_strengths' mean why/how {own_name} specifically wins against THIS competitor — ground "
+        f"them in real, concrete points from {own_name}'s own content, not generic claims.\n"
         "Return ONLY valid JSON with no markdown fences. Schema:\n"
         "{\n"
         "  \"battlecards\": [\n"
         "    {\n"
         "      \"competitor\": \"<exact competitor name>\",\n"
         "      \"overview\": \"<1-2 sentences: who they are and their market position>\",\n"
+        f"      \"your_strengths\": [\"<a specific {own_name} strength that matters most against THIS competitor, grounded in {own_name}'s own content>\"],\n"
         "      \"their_strengths\": [\"<genuine strength, grounded in their content>\"],\n"
         "      \"their_weaknesses\": [\"<genuine gap or weakness visible in their content>\"],\n"
         "      \"objections\": [\n"
         "        {\"objection\": \"<what a prospect might say>\", \"response\": \"<what the rep should say back>\"}\n"
         "      ],\n"
-        "      \"why_we_win\": [\"<concrete reason grounded in evidence>\"],\n"
+        f"      \"why_we_win\": [\"<concrete reason {own_name} wins this specific matchup, grounded in evidence>\"],\n"
         "      \"landmines\": [\"<a question to plant with the prospect that surfaces a real competitor weakness>\"]\n"
         "    }\n"
         "  ]\n"
