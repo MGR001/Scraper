@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -189,23 +189,29 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
 
     own_company = await _combine_own_company(db, ws.workspace_id, _build_own_content)
 
+    # Fixed 5-day comparison window: "current" is the latest finished scrape no
+    # matter how recent, "baseline" is the most recent finished scrape from at
+    # least 5 days ago — so this always reflects what changed over ~5 days,
+    # not just whatever the last two scrapes happened to be (which could be
+    # hours apart on a frequently-scraped source).
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+
     results = []
     for src in sources:
         is_own = src["category"] == "own"
 
-        # Get the two most recent *finished* scrape sessions for this source
-        sessions_res = await asyncio.to_thread(
+        latest_res = await asyncio.to_thread(
             lambda sid=src["id"]: db.table("scrape_sessions")
             .select("id, started_at, finished_at")
             .eq("source_id", sid)
             .not_.is_("finished_at", "null")
             .order("started_at", desc=True)
-            .limit(2)
+            .limit(1)
             .execute()
         )
-        sessions = sessions_res.data or []
+        latest_list = latest_res.data or []
 
-        if not sessions:
+        if not latest_list:
             results.append({
                 "name": src["name"], "url": src["url"], "is_own_company": is_own,
                 "has_changes": False,
@@ -215,8 +221,20 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
             })
             continue
 
-        latest_session = sessions[0]
-        prev_session = sessions[1] if len(sessions) >= 2 else None
+        latest_session = latest_list[0]
+
+        prev_res = await asyncio.to_thread(
+            lambda sid=src["id"]: db.table("scrape_sessions")
+            .select("id, started_at, finished_at")
+            .eq("source_id", sid)
+            .not_.is_("finished_at", "null")
+            .lte("started_at", cutoff_iso)
+            .order("started_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        prev_list = prev_res.data or []
+        prev_session = prev_list[0] if prev_list else None
 
         # Fetch up to 12 content chunks from the latest session
         recent_res = await asyncio.to_thread(

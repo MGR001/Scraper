@@ -729,6 +729,14 @@ async def generate_feature_matrix(
             "you find in the content that aren't already covered above — but the fixed rows always come "
             "first, unchanged.\n"
         )
+    elif own_company:
+        category_rule = (
+            f"1. Identify 8-14 distinct features or claims found in {own_company['name']}'s own content "
+            "below — marked \"YOUR COMPANY\" — (product capabilities, integrations, guarantees, "
+            "certifications, pricing-model traits, etc.). These become the comparison rows: what "
+            f"{own_company['name']} itself claims or offers, not a generic cross-company list. Then, in "
+            "step 2, check every other company against these same rows.\n"
+        )
     else:
         category_rule = (
             "1. Identify 8-14 distinct features or claims that appear across these companies "

@@ -455,6 +455,12 @@
   async function generateSummary(sourceId) {
     const btn     = document.getElementById(`btn-${sourceId}`);
     const summDiv = document.getElementById(`summary-${sourceId}`);
+    if (!btn || !summDiv) {
+      // Source isn't rendered on the current page (e.g. a news/market source
+      // while on the Competitors page) — nothing to update, just call the API.
+      await api(`/api/insights/summary/${sourceId}`, { method: 'POST' });
+      return;
+    }
     btn.disabled  = true;
     btn.innerHTML = '<span class="spinner"></span> Generating\u2026';
     summDiv.innerHTML = '<div class="flex items-center gap-2 text-slate-500 text-sm"><span class="spinner"></span> Analysing content with GPT-5.6\u2026</div>';
@@ -472,8 +478,25 @@
 
   async function generateAllSummaries() {
     const sources = await api('/api/sources/').catch(() => []);
-    for (const s of sources) {
-      if (s.chunks_stored > 0) await generateSummary(s.id);
+    // Only the sources actually shown on this page (own + competitor) — generating
+    // summaries for news/market/general sources here would silently skip them
+    // anyway since they have no evidence content_summary in the same sense.
+    const targets = sources.filter(s => (s.category === 'competitor' || s.category === 'own') && s.chunks_stored > 0);
+    let failed = 0;
+    for (const s of targets) {
+      try {
+        await generateSummary(s.id);
+      } catch (e) {
+        failed++;
+        console.error(`Failed to generate summary for ${s.name}:`, e);
+      }
+    }
+    if (failed > 0) {
+      showToast(`Generated ${targets.length - failed}/${targets.length} summaries — ${failed} failed.`, true);
+    } else if (targets.length > 0) {
+      showToast(`Generated ${targets.length} summar${targets.length === 1 ? 'y' : 'ies'}.`);
+    } else {
+      showToast('No sources with scraped content yet.', true);
     }
   }
 
@@ -1305,7 +1328,7 @@
     }).join('');
     content.innerHTML = `
       <div class="flex items-center justify-between mb-3">
-        <h3 class="font-semibold text-slate-900 text-sm">Competitor Change Analysis <span class="text-xs font-normal text-slate-500">(last 7 days vs previous 30 days)</span></h3>
+        <h3 class="font-semibold text-slate-900 text-sm">Competitor Change Analysis <span class="text-xs font-normal text-slate-500">(current vs. ~5 days ago)</span></h3>
         <div class="flex items-center gap-3">
           <button onclick="exportChanges()" class="text-xs text-slate-400 hover:text-blue-400 transition">Export</button>
           <button onclick="loadCompetitorChanges(true)" class="text-xs text-slate-400 hover:text-blue-400 transition">Refresh</button>
