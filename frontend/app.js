@@ -851,13 +851,15 @@
       }
       el.innerHTML = sources.map(s => {
         const st  = statuses[s.id] || {};
-        const cfg = statusConfig(st.state);
+        const cfg = statusConfig(st.state, st.detail);
+        const newChunks = (st.state === 'completed' && st.new_chunks > 0) ? st.new_chunks : 0;
         return `<div class="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-0.5">
               <span class="font-semibold text-slate-900 text-sm">${esc(s.name)}</span>
               ${badgeHtml(s.category)}
               ${s.is_active ? '' : '<span class="badge badge-general">paused</span>'}
+              ${newChunks > 0 ? `<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" title="New chunks from last scrape">↑ +${newChunks} new</span>` : ''}
             </div>
             <p class="text-xs text-slate-400 truncate">${esc(s.url)}</p>
             <div class="flex items-center gap-3 mt-1.5">
@@ -1270,7 +1272,7 @@
     const content = document.getElementById('changes-content');
     const results = data.results || [];
     if (!results.length) {
-      content.innerHTML = '<p class="text-slate-500 text-sm">No active competitor sources found.</p>';
+      content.innerHTML = '<p class="text-slate-500 text-sm">No active competitor or company sources found.</p>';
       return;
     }
     const cards = results.map(r => {
@@ -1289,10 +1291,11 @@
         ? `<ul class="mt-1 space-y-0.5">${r.stable.map(s =>
             `<li class="flex items-start gap-1.5 text-xs text-slate-500"><span class="mt-1 shrink-0 w-1.5 h-1.5 rounded-full bg-slate-600"></span>${esc(s)}</li>`
           ).join('')}</ul>` : '';
-      return `<div class="bg-surface border border-border rounded-xl p-4">
+      return `<div class="bg-surface border ${r.is_own_company ? 'border-orange-300' : 'border-border'} rounded-xl p-4">
         <div class="flex items-center gap-2 mb-1">
           <span class="w-2 h-2 rounded-full ${dot} shrink-0"></span>
           <span class="font-semibold text-slate-900 text-sm">${esc(r.name)}</span>
+          ${r.is_own_company ? '<span class="text-[10px] font-normal text-orange-600">(you)</span>' : ''}
           <span class="text-xs ${labelCol} ml-auto">${label}</span>
         </div>
         ${scrapeInfo ? `<div class="mb-2">${scrapeInfo}</div>` : ''}

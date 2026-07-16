@@ -148,20 +148,21 @@ async def competitive_comparison(ws: WorkspaceContext = Depends(get_workspace)):
 
 @router.get("/competitor-changes")
 async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
-    """Compare the latest scrape session vs the one before it for each competitor."""
+    """Compare the latest scrape session vs the one before it for each competitor,
+    plus the user's own company sources so they can track their own site's changes too."""
     db = get_service_db()
 
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources")
-        .select("id, name, url")
+        .select("id, name, url, category")
         .eq("workspace_id", ws.workspace_id)
-        .eq("category", "competitor")
+        .in_("category", ["competitor", "own"])
         .eq("is_active", True)
         .execute()
     )
     sources = sources_res.data or []
     if not sources:
-        return {"results": [], "error": "No active competitor sources found."}
+        return {"results": [], "error": "No active competitor or company sources found."}
 
     async def _build_own_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
         content_res = await asyncio.to_thread(
@@ -190,6 +191,8 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
 
     results = []
     for src in sources:
+        is_own = src["category"] == "own"
+
         # Get the two most recent *finished* scrape sessions for this source
         sessions_res = await asyncio.to_thread(
             lambda sid=src["id"]: db.table("scrape_sessions")
@@ -204,7 +207,7 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
 
         if not sessions:
             results.append({
-                "name": src["name"], "url": src["url"],
+                "name": src["name"], "url": src["url"], "is_own_company": is_own,
                 "has_changes": False,
                 "summary": "No scrape sessions found. Run a scrape first.",
                 "changes": [], "stable": [],
@@ -236,14 +239,24 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
             )
             old_chunks = [r["content"] for r in (old_res.data or []) if r.get("content")]
 
-        change_data = await generate_competitor_changes(src["name"], old_chunks, recent_chunks, own_company=own_company)
+        # For the own company's own source, there's no separate "own company" to
+        # compare it against strategically — skip that framing and just report
+        # what changed.
+        change_data = await generate_competitor_changes(
+            src["name"], old_chunks, recent_chunks,
+            own_company=None if is_own else own_company,
+        )
         results.append({
             "name": src["name"],
             "url": src["url"],
+            "is_own_company": is_own,
             **change_data,
             "latest_scrape": latest_session["started_at"],
             "previous_scrape": prev_session["started_at"] if prev_session else None,
         })
+
+    # Own company first, like the Competitors tab and Competitive Landscape Matrix.
+    results.sort(key=lambda r: not r.get("is_own_company"))
 
     return {
         "results": results,
