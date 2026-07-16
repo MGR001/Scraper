@@ -241,25 +241,32 @@ def _parse_sitemap_xml(xml_text: str) -> tuple[list[str], list[str]]:
         return pages, []
 
 
-async def discover_sitemap_urls(base_url: str, max_urls: int = 50) -> list[str]:
+async def discover_sitemap_urls(base_url: str, max_urls: int = 50, sitemap_override: str | None = None) -> list[str]:
     """
     Attempt to discover all page URLs via the site's sitemap.
     Checks /sitemap.xml first, then robots.txt as fallback.
     Returns a list of HTML page URLs (capped at max_urls), or [] if no sitemap found.
+
+    If sitemap_override is given (a source's manually-set sitemap_url), it's used as
+    the only candidate instead of guessing — lets a user point at the right sitemap
+    when auto-discovery picks the wrong one or a site doesn't expose it at the usual paths.
     """
     parsed = urlparse(base_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
 
-    # 1. Candidate sitemap URLs
-    candidates: list[str] = [f"{origin}/sitemap.xml", f"{origin}/sitemap_index.xml"]
+    if sitemap_override:
+        candidates: list[str] = [sitemap_override]
+    else:
+        # 1. Candidate sitemap URLs
+        candidates = [f"{origin}/sitemap.xml", f"{origin}/sitemap_index.xml"]
 
-    robots = await _fetch_text(f"{origin}/robots.txt")
-    if robots:
-        for line in robots.splitlines():
-            if line.lower().startswith("sitemap:"):
-                url = line.split(":", 1)[1].strip()
-                if url not in candidates:
-                    candidates.insert(0, url)  # robots.txt hint takes priority
+        robots = await _fetch_text(f"{origin}/robots.txt")
+        if robots:
+            for line in robots.splitlines():
+                if line.lower().startswith("sitemap:"):
+                    url = line.split(":", 1)[1].strip()
+                    if url not in candidates:
+                        candidates.insert(0, url)  # robots.txt hint takes priority
 
     # 2. Fetch and parse each candidate
     all_pages: list[str] = []
@@ -501,7 +508,8 @@ async def _scrape_feed(
 
 async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
                         workspace_id: str | None = None,
-                        crawl_scope: str = "domain") -> dict:
+                        crawl_scope: str = "domain",
+                        sitemap_url: str | None = None) -> dict:
     """
     Full crawl for a source:
       1. Discover seed URLs from sitemap (if available).
@@ -582,19 +590,22 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
 
     try:
         # ── Step 1: Sitemap seeds ─────────────────────────────────────────────
-        sitemap_urls = await discover_sitemap_urls(base_url, max_urls=max_pages)
+        sitemap_urls = await discover_sitemap_urls(base_url, max_urls=max_pages, sitemap_override=sitemap_url)
         if crawl_scope == "path":
             sitemap_urls = [u for u in sitemap_urls if _path_in_scope(u)]
         sitemap_found = len(sitemap_urls) > 0
 
         if sitemap_found:
-            origin = f"{base_parsed.scheme}://{base_parsed.netloc}"
-            await asyncio.to_thread(
-                lambda: db.table("sources")
-                .update({"sitemap_url": f"{origin}/sitemap.xml"})
-                .eq("id", source_id)
-                .execute()
-            )
+            # Only record the auto-guessed sitemap.xml path if the user hasn't
+            # already set one explicitly — don't clobber a manual override.
+            if not sitemap_url:
+                origin = f"{base_parsed.scheme}://{base_parsed.netloc}"
+                await asyncio.to_thread(
+                    lambda: db.table("sources")
+                    .update({"sitemap_url": f"{origin}/sitemap.xml"})
+                    .eq("id", source_id)
+                    .execute()
+                )
             logger.info("Sitemap: %d seed URLs", len(sitemap_urls))
             seeds = sitemap_urls
             set_status(source_id, "running", f"Sitemap found — {len(sitemap_urls)} pages queued")

@@ -363,6 +363,12 @@
             <option value="path">Same section only (URL path)</option>
           </select>
         </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1">Sitemap URL (optional)</label>
+          <input id="edit-src-sitemap" type="url" placeholder="Auto-detected — set to override"
+            class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+          <p class="text-xs text-slate-400 mt-1">Leave blank to auto-detect from /sitemap.xml or robots.txt. Set this if auto-detection finds the wrong sitemap, or clear it to go back to auto-detect.</p>
+        </div>
         <p id="edit-src-status" class="text-sm hidden"></p>
         <div class="flex gap-3 justify-end pt-1">
           <button onclick="closeEditSourceModal()"

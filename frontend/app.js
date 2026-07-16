@@ -1145,6 +1145,7 @@
     document.getElementById('edit-src-category').value = src.category || 'general';
     document.getElementById('edit-src-interval').value = src.scrape_interval || 24;
     document.getElementById('edit-src-scope').value = src.crawl_scope || 'domain';
+    document.getElementById('edit-src-sitemap').value = src.sitemap_url || '';
     const st = document.getElementById('edit-src-status');
     st.className = 'text-sm hidden';
     st.textContent = '';
@@ -1163,6 +1164,7 @@
     const category = document.getElementById('edit-src-category').value;
     const interval = parseInt(document.getElementById('edit-src-interval').value, 10);
     const scope    = document.getElementById('edit-src-scope').value;
+    const sitemap  = document.getElementById('edit-src-sitemap').value.trim();
     const st       = document.getElementById('edit-src-submit');
     const statusEl = document.getElementById('edit-src-status');
     if (!name || !url) {
@@ -1174,7 +1176,7 @@
     try {
       await api(`/api/sources/${_editSourceId}`, {
         method: 'PUT',
-        body: JSON.stringify({ name, url, category, scrape_interval: interval || 24, crawl_scope: scope }),
+        body: JSON.stringify({ name, url, category, scrape_interval: interval || 24, crawl_scope: scope, sitemap_url: sitemap }),
       });
       closeEditSourceModal();
       showToast('Source updated.');

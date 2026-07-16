@@ -18,6 +18,7 @@ class SourceUpdate(BaseModel):
     scrape_interval: Optional[int] = None
     is_active: Optional[bool] = None
     crawl_scope: Optional[str] = None
+    sitemap_url: Optional[str] = None
 
 
 class ChatMessage(BaseModel):

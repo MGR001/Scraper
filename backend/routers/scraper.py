@@ -12,6 +12,13 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+async def _get_max_pages(db, workspace_id: str) -> int:
+    ws_res = await asyncio.to_thread(
+        lambda: db.table("workspaces").select("crawl_max_pages").eq("id", workspace_id).execute()
+    )
+    return (ws_res.data or [{}])[0].get("crawl_max_pages") or 50
+
+
 @router.post("/run/{source_id}")
 async def run_scrape(source_id: str, background_tasks: BackgroundTasks,
                      ws: WorkspaceContext = Depends(get_workspace)):
@@ -37,9 +44,11 @@ async def run_scrape(source_id: str, background_tasks: BackgroundTasks,
         if not stale:
             raise HTTPException(409, "A scrape is already running for this source.")
 
+    max_pages = await _get_max_pages(db, ws.workspace_id)
     background_tasks.add_task(scrape_source, source_id, source["url"],
-                              workspace_id=ws.workspace_id,
-                              crawl_scope=source.get("crawl_scope", "domain"))
+                              max_pages=max_pages, workspace_id=ws.workspace_id,
+                              crawl_scope=source.get("crawl_scope", "domain"),
+                              sitemap_url=source.get("sitemap_url"))
     return {"message": f"Scrape started for '{source['name']}'. Checking sitemap…"}
 
 
@@ -52,10 +61,12 @@ async def run_all_scrapes(background_tasks: BackgroundTasks,
         lambda: db.table("sources").select("*")
         .eq("workspace_id", ws.workspace_id).eq("is_active", True).execute()
     )
+    max_pages = await _get_max_pages(db, ws.workspace_id)
     for source in result.data:
         background_tasks.add_task(scrape_source, source["id"], source["url"],
-                                  workspace_id=ws.workspace_id,
-                                  crawl_scope=source.get("crawl_scope", "domain"))
+                                  max_pages=max_pages, workspace_id=ws.workspace_id,
+                                  crawl_scope=source.get("crawl_scope", "domain"),
+                                  sitemap_url=source.get("sitemap_url"))
     return {"message": f"Started scraping {len(result.data)} sources (sitemap-aware)."}
 
 
