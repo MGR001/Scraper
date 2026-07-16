@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
 
 import httpx
+import trafilatura
 from bs4 import BeautifulSoup
 
 from ..database import get_db, get_service_db
@@ -159,6 +160,22 @@ def extract_content(html: str) -> tuple[str, str]:
 
     text = content_elem.get_text(separator=" ", strip=True)
     text = re.sub(r"\s+", " ", text).strip()
+
+    # Fallback: site builders like Framer/Webflow often skip semantic tags
+    # (<nav>/<header>/<article>) and use hashed, non-descriptive class names, so
+    # the heuristic above falls through to the raw <body> and picks up nav/menu
+    # boilerplate that's identical across every page instead of the real content.
+    # trafilatura's text-density-based extraction isn't fooled by that — use its
+    # result when it clearly found more actual content than the tag-based pass did.
+    try:
+        traf_text = trafilatura.extract(html, include_comments=False, include_tables=False)
+    except Exception:
+        traf_text = None
+    if traf_text:
+        traf_text = re.sub(r"\s+", " ", traf_text).strip()
+        if len(traf_text) > len(text) * 1.3:
+            text = traf_text
+
     return title, text
 
 
