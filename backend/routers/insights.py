@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,9 +8,11 @@ from ..auth import WorkspaceContext, get_workspace
 from ..database import get_service_db
 from ..models.schemas import ChatMessage
 from ..rate_limit import check_rate_limit
+from ..services.embeddings import get_embedding
 from ..services.llm import chat_with_context, generate_source_summary, generate_comparison, generate_competitor_changes, generate_gtm_heatmap, generate_positioning_teardown, generate_campaign_messaging, generate_positioning_canvas, generate_feature_matrix, generate_kano_analysis, generate_messaging_house, generate_battlecards
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def _combine_own_company(db, workspace_id: str, build_content, max_chars: int = 2000) -> dict | None:
@@ -473,28 +476,62 @@ async def feature_matrix(ws: WorkspaceContext = Depends(get_workspace)):
     if not sources:
         raise HTTPException(400, "No active competitor sources found. Add competitors in the Sources tab first.")
 
-    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
+    # Semantic retrieval: with sources now holding hundreds of scraped pages each,
+    # pulling the most-recently-scraped dozen was an almost-random sample (often
+    # only 1-2 pages actually fit the old char cap). Instead, embed one query about
+    # what a feature/claim matrix cares about and pull the chunks each source
+    # actually has that are relevant to it, via the existing match_content vector
+    # search (already used for chat RAG) — one embedding + one workspace-scoped
+    # RPC call, then grouped per source client-side.
+    FEATURE_QUERY = (
+        "product features, capabilities, integrations, pricing and plans, "
+        "certifications, guarantees, security and compliance"
+    )
+    semantic_by_source: dict[str, list[dict]] = {}
+    try:
+        query_embedding = await get_embedding(FEATURE_QUERY)
+        matches_res = await asyncio.to_thread(
+            lambda: db.rpc("match_content", {
+                "query_embedding": query_embedding,
+                "match_threshold": 0.15,
+                "match_count": 600,
+                "p_workspace_id": ws.workspace_id,
+            }).execute()
+        )
+        for row in (matches_res.data or []):
+            semantic_by_source.setdefault(row["source_id"], []).append(row)
+    except Exception as exc:
+        logger.error("Feature matrix semantic retrieval failed, falling back to recency: %s", exc)
+
+    async def _build_content(src: dict, limit: int = 15, max_chars: int = 8000) -> str:
         # Tag each chunk with the exact page URL it came from (scraped_content.url,
         # not just the source's root url) so the AI can cite a specific source URL
         # per feature/company cell for the frontend's evidence hover.
-        content_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scraped_content")
-            .select("content, url")
-            .eq("source_id", sid)
-            .order("scraped_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
+        rows = semantic_by_source.get(src["id"], [])[:limit]
+        if not rows:
+            # No semantic matches for this source (too few pages, or everything fell
+            # below the similarity threshold) — fall back to its most recent content
+            # rather than leaving it with nothing.
+            content_res = await asyncio.to_thread(
+                lambda sid=src["id"]: db.table("scraped_content")
+                .select("content, url")
+                .eq("source_id", sid)
+                .order("scraped_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            rows = content_res.data or []
+
         seen: set[str] = set()
         parts: list[str] = []
         total = 0
-        for row in (content_res.data or []):
+        for row in rows:
             chunk = (row.get("content") or "").strip()
             if not chunk or chunk in seen:
                 continue
             seen.add(chunk)
             chunk_url = row.get("url") or src["url"]
-            parts.append(f"(Source URL: {chunk_url})\n{chunk[:400]}")
+            parts.append(f"(Source URL: {chunk_url})\n{chunk[:800]}")
             total += len(chunk)
             if total >= max_chars:
                 break
@@ -508,7 +545,7 @@ async def feature_matrix(ws: WorkspaceContext = Depends(get_workspace)):
             "content_summary": await _build_content(src),
         })
 
-    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+    own_company = await _combine_own_company(db, ws.workspace_id, _build_content, max_chars=8000)
 
     ws_res = await asyncio.to_thread(
         lambda: db.table("workspaces").select("feature_matrix_categories").eq("id", ws.workspace_id).execute()
