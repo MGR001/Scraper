@@ -13,8 +13,10 @@ import httpx
 import trafilatura
 from bs4 import BeautifulSoup
 
+from ..config import settings
 from ..database import get_db, get_service_db
 from .embeddings import get_embedding
+from .summarizer import store_page_summary
 
 logger = logging.getLogger(__name__)
 
@@ -495,6 +497,8 @@ async def _scrape_feed(
     logger.info("Feed %s: %d articles found", feed_url, len(articles))
     total_new = 0
     errors = 0
+    summaries_generated = 0
+    summaries_skipped = 0
 
     for i, article in enumerate(articles, 1):
         set_status(source_id, "running",
@@ -505,6 +509,25 @@ async def _scrape_feed(
                 session_id=session_id, workspace_id=workspace_id,
             )
             total_new += new
+
+            if workspace_id and summaries_generated < settings.max_summaries_per_sweep:
+                try:
+                    generated = await store_page_summary(
+                        workspace_id, source_id, article["url"], article["title"],
+                        chunk_text(article["content"]), session_id=session_id,
+                    )
+                    if generated:
+                        summaries_generated += 1
+                        if summaries_generated >= settings.max_summaries_per_sweep:
+                            logger.warning(
+                                "Source %s hit max_summaries_per_sweep (%d) — remaining pages "
+                                "will still be scraped but not summarised this sweep",
+                                source_id, settings.max_summaries_per_sweep,
+                            )
+                    else:
+                        summaries_skipped += 1
+                except Exception as summ_exc:
+                    logger.warning("Page summary failed for %s: %s", article["url"], summ_exc)
         except Exception as exc:
             logger.error("Feed article failed %s: %s", article["url"], exc)
             errors += 1
@@ -517,10 +540,15 @@ async def _scrape_feed(
         .execute()
     )
 
+    logger.info("summaries: %d generated, %d skipped (unchanged), model=%s",
+                summaries_generated, summaries_skipped, settings.summary_model)
     set_status(source_id, "completed",
                f"{len(articles)} articles · {total_new} new chunks · {errors} errors",
                new_chunks=total_new)
-    return {"pages": len(articles), "new_chunks": total_new, "errors": errors}
+    return {
+        "pages": len(articles), "new_chunks": total_new, "errors": errors,
+        "summaries_generated": summaries_generated,
+    }
 
 
 async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
@@ -582,6 +610,7 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
                     "pages": result["pages"],
                     "new_chunks": result["new_chunks"],
                     "errors": result["errors"],
+                    "summaries_generated": result.get("summaries_generated", 0),
                 }).eq("id", session_id).execute()
             )
         return result
@@ -601,6 +630,8 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
     total_stored = 0
     errors = 0
     pages_crawled = 0
+    summaries_generated = 0
+    summaries_skipped = 0
     _crawl_failed = False
     visited: set[str] = set()
     skipped_robots = 0
@@ -696,6 +727,25 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
                     )
                     total_stored += stored
 
+                    if workspace_id and summaries_generated < settings.max_summaries_per_sweep:
+                        try:
+                            generated = await store_page_summary(
+                                workspace_id, source_id, url, title,
+                                chunk_text(content), session_id=session_id,
+                            )
+                            if generated:
+                                summaries_generated += 1
+                                if summaries_generated >= settings.max_summaries_per_sweep:
+                                    logger.warning(
+                                        "Source %s hit max_summaries_per_sweep (%d) — remaining pages "
+                                        "will still be crawled but not summarised this sweep",
+                                        source_id, settings.max_summaries_per_sweep,
+                                    )
+                            else:
+                                summaries_skipped += 1
+                        except Exception as summ_exc:
+                            logger.warning("Page summary failed for %s: %s", url, summ_exc)
+
                 pages_crawled += 1
                 set_status(source_id, "running",
                            f"Page {pages_crawled}/{max(len(visited), pages_crawled)} · {url[:70]}")
@@ -726,9 +776,10 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
                     "pages": pages_crawled,
                     "new_chunks": total_stored,
                     "errors": errors,
+                    "summaries_generated": summaries_generated,
                 }).eq("id", session_id).execute()
             )
-        # ── Step 4: Expire stale chunks (Task 7) ─────────────────────────────
+        # ── Step 4: Expire stale chunks and summaries (Task 7 / Task 3) ──────
         if pages_crawled > 0:
             error_rate = errors / pages_crawled
             if error_rate < 0.20:
@@ -743,6 +794,17 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
                     logger.info("Expired stale chunks for source %s", source_id)
                 except Exception as _exc:
                     logger.warning("Could not expire stale chunks: %s", _exc)
+                try:
+                    await asyncio.to_thread(
+                        lambda: db.table("page_summaries")
+                        .delete()
+                        .eq("source_id", source_id)
+                        .lt("updated_at", session_started_at)
+                        .execute()
+                    )
+                    logger.info("Expired stale page summaries for source %s", source_id)
+                except Exception as _exc:
+                    logger.warning("Could not expire stale page summaries: %s", _exc)
 
     summary = {
         "urls_found": len(visited),
@@ -750,8 +812,11 @@ async def scrape_source(source_id: str, base_url: str, max_pages: int = 50,
         "chunks_stored": total_stored,
         "errors": errors,
         "skipped_robots": skipped_robots,
+        "summaries_generated": summaries_generated,
     }
     logger.info("Crawl complete for %s: %s", base_url, summary)
+    logger.info("summaries: %d generated, %d skipped (unchanged), model=%s",
+                summaries_generated, summaries_skipped, settings.summary_model)
     set_status(source_id, "completed",
                f"{pages_crawled} pages · {total_stored} new chunks · {errors} errors",
                new_chunks=total_stored)
