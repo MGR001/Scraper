@@ -1328,7 +1328,7 @@
     }).join('');
     content.innerHTML = `
       <div class="flex items-center justify-between mb-3">
-        <h3 class="font-semibold text-slate-900 text-sm">Competitor Change Analysis <span class="text-xs font-normal text-slate-500">(current vs. ~5 days ago)</span></h3>
+        <h3 class="font-semibold text-slate-900 text-sm">Competitor Change Analysis <span class="text-xs font-normal text-slate-500">(current vs. previous scrape)</span></h3>
         <div class="flex items-center gap-3">
           <button onclick="exportChanges()" class="text-xs text-slate-400 hover:text-blue-400 transition">Export</button>
           <button onclick="loadCompetitorChanges(true)" class="text-xs text-slate-400 hover:text-blue-400 transition">Refresh</button>

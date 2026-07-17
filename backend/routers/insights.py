@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -268,29 +268,27 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
     # raw scraped_content chunks, untouched by the page_summaries migration.
     own_company = await _combine_own_company(db, ws.workspace_id)
 
-    # Fixed 5-day comparison window: "current" is the latest finished scrape no
-    # matter how recent, "baseline" is the most recent finished scrape from at
-    # least 5 days ago — so this always reflects what changed over ~5 days,
-    # not just whatever the last two scrapes happened to be (which could be
-    # hours apart on a frequently-scraped source).
-    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
-
     results = []
     for src in sources:
         is_own = src["category"] == "own"
 
-        latest_res = await asyncio.to_thread(
+        # "current" is the latest finished scrape, "baseline" is the one
+        # immediately before it — whatever the actual last two scrapes were,
+        # not a fixed calendar window. A source scraped daily just shows
+        # day-over-day changes; scrape it twice in a row with nothing new in
+        # between and it correctly reports no changes.
+        sessions_res = await asyncio.to_thread(
             lambda sid=src["id"]: db.table("scrape_sessions")
             .select("id, started_at, finished_at")
             .eq("source_id", sid)
             .not_.is_("finished_at", "null")
             .order("started_at", desc=True)
-            .limit(1)
+            .limit(2)
             .execute()
         )
-        latest_list = latest_res.data or []
+        sessions = sessions_res.data or []
 
-        if not latest_list:
+        if not sessions:
             results.append({
                 "name": src["name"], "url": src["url"], "is_own_company": is_own,
                 "has_changes": False,
@@ -300,20 +298,8 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
             })
             continue
 
-        latest_session = latest_list[0]
-
-        prev_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scrape_sessions")
-            .select("id, started_at, finished_at")
-            .eq("source_id", sid)
-            .not_.is_("finished_at", "null")
-            .lte("started_at", cutoff_iso)
-            .order("started_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        prev_list = prev_res.data or []
-        prev_session = prev_list[0] if prev_list else None
+        latest_session = sessions[0]
+        prev_session = sessions[1] if len(sessions) > 1 else None
 
         # Fetch up to 12 content chunks from the latest session, newest-first
         # by scraped_at (= first-seen time — unchanged when a chunk is just
