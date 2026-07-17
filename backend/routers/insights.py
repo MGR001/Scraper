@@ -337,6 +337,35 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
             src["name"], old_chunks, recent_chunks,
             own_company=None if is_own else own_company,
         )
+
+        # New pages are always a change, whether or not the LLM's 12-chunk
+        # sample happened to include one. Only runs when prev_session exists,
+        # so a source's first-ever scrape (no baseline yet) never reports
+        # changes here — new_page_urls would otherwise include every page.
+        if prev_session:
+            new_pages_res = await asyncio.to_thread(
+                lambda sess_id=latest_session["id"], since=latest_session["started_at"]:
+                    db.table("scraped_content")
+                    .select("url, title")
+                    .eq("session_id", sess_id)
+                    .gte("scraped_at", since)  # scraped_at is set once, on first insert —
+                                                # unchanged when a chunk is merely reconfirmed
+                    .execute()
+            )
+            seen_urls: set[str] = set()
+            new_pages: list[str] = []
+            for row in (new_pages_res.data or []):
+                if row["url"] not in seen_urls:
+                    seen_urls.add(row["url"])
+                    new_pages.append(row.get("title") or row["url"])
+
+            if new_pages:
+                change_data["has_changes"] = True
+                shown = [f"New page found: {t}" for t in new_pages[:10]]
+                if len(new_pages) > 10:
+                    shown.append(f"...and {len(new_pages) - 10} more new page(s)")
+                change_data["changes"] = shown + list(change_data.get("changes") or [])
+
         results.append({
             "name": src["name"],
             "url": src["url"],
