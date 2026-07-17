@@ -15,6 +15,7 @@ class Settings(BaseSettings):
                                           # with gpt-5.6-terra budgets elsewhere
     max_summaries_per_sweep: int = 400
     contact_email: str = "contact@example.com"  # Reddit User-Agent contact — required by their API rules
+    classifier_model: str = "gpt-4o-mini"  # cheap model for high-volume mention classification
 
     model_config = {"env_file": ".env"}
 
