@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     scrape_timeout: int = 30
     embedding_model: str = "text-embedding-3-small"
     chat_model: str = "gpt-5.6-terra"
+    summary_model: str = "gpt-4o-mini"  # cheap, non-reasoning model — per-page volume x
+                                          # reasoning-token cost is the trap already hit
+                                          # with gpt-5.6-terra budgets elsewhere
+    max_summaries_per_sweep: int = 400
 
     model_config = {"env_file": ".env"}
 
