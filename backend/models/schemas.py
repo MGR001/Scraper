@@ -23,3 +23,9 @@ class SourceUpdate(BaseModel):
 
 class ChatMessage(BaseModel):
     message: str
+
+
+class MentionsConfigUpdate(BaseModel):
+    mention_terms: Optional[list[str]] = None
+    mention_subreddits: Optional[list[str]] = None
+    mentions_enabled: Optional[bool] = None

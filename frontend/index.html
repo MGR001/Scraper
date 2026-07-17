@@ -186,6 +186,10 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 01-2.25 2.25M16.5 7.5V18a2.25 2.25 0 002.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 002.25 2.25h13.5M6 7.5h3v3H6v-3z"/></svg>
         News
       </button>
+      <button class="tab-btn" data-page="mentions" onclick="showPage('mentions')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
+        Mentions
+      </button>
 
       <p class="px-3 pt-4 pb-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Act</p>
       <button class="tab-btn" data-page="changes" onclick="showPage('changes')">
@@ -339,7 +343,7 @@
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-semibold text-slate-500 mb-1">Category</label>
-            <select id="edit-src-category"
+            <select id="edit-src-category" onchange="toggleMentionsSection()"
               class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="general">General</option>
               <option value="competitor">Competitor</option>
@@ -368,6 +372,27 @@
           <input id="edit-src-sitemap" type="url" placeholder="Auto-detected — set to override"
             class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
           <p class="text-xs text-slate-400 mt-1">Leave blank to auto-detect from /sitemap.xml or robots.txt. Set this if auto-detection finds the wrong sitemap, or clear it to go back to auto-detect.</p>
+        </div>
+        <div id="edit-src-mentions-section" class="border-t border-border pt-3 mt-1 hidden">
+          <label class="flex items-center gap-2 mb-2 cursor-pointer">
+            <input id="edit-src-mentions-enabled" type="checkbox"
+              class="rounded border-border text-blue-600 focus:ring-blue-500"/>
+            <span class="text-xs font-semibold text-slate-700">Track Reddit mentions</span>
+          </label>
+          <div class="space-y-2">
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 mb-1">Search terms</label>
+              <input id="edit-src-mention-terms" type="text" placeholder="e.g. legora, legora ai"
+                class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+              <p class="text-xs text-slate-400 mt-1">Comma-separated. Leave blank to default to the source name.</p>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 mb-1">Subreddits to watch</label>
+              <input id="edit-src-mention-subreddits" type="text" placeholder="e.g. legaltech, LawFirm"
+                class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+              <p class="text-xs text-slate-400 mt-1">Comma-separated, without "r/". Also searched Reddit-wide regardless of this list.</p>
+            </div>
+          </div>
         </div>
         <p id="edit-src-status" class="text-sm hidden"></p>
         <div class="flex gap-3 justify-end pt-1">
@@ -720,6 +745,54 @@
 
     <div id="news-load-more" class="mt-5 text-center hidden">
       <button onclick="loadMoreNews()"
+        class="text-sm text-slate-400 hover:text-blue-400 transition border border-border px-5 py-2 rounded-lg hover:border-blue-500">
+        Load more
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Mentions ──────────────────────────────────── -->
+  <div id="page-mentions" class="page p-6 max-w-4xl mx-auto">
+    <div class="flex items-center justify-between mb-5">
+      <div>
+        <h1 class="text-2xl font-bold">Reddit Mentions</h1>
+        <p class="text-sm text-slate-400 mt-0.5">Customer voice from Reddit for each tracked competitor</p>
+      </div>
+      <button onclick="loadMentions(true)"
+        class="flex items-center gap-1.5 text-slate-500 hover:text-slate-900 text-sm transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
+
+    <div id="mentions-summary" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5"></div>
+
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <div id="mentions-source-pills" class="flex flex-wrap gap-2"></div>
+      <select id="mentions-signal-filter" onchange="applyMentionsFilters()"
+        class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option value="">All signal types</option>
+        <option value="complaint">Complaint</option>
+        <option value="praise">Praise</option>
+        <option value="question">Question</option>
+        <option value="comparison">Comparison</option>
+        <option value="switching_intent">Switching intent</option>
+        <option value="other">Other</option>
+      </select>
+      <button id="mentions-switching-btn" onclick="toggleSwitchingIntentFilter()"
+        class="text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition">
+        ⚠ Switching intent only
+      </button>
+    </div>
+
+    <div id="mentions-feed" class="space-y-3">
+      <p class="text-slate-500 text-sm">Loading…</p>
+    </div>
+
+    <div id="mentions-load-more" class="mt-5 text-center hidden">
+      <button onclick="loadMoreMentions()"
         class="text-sm text-slate-400 hover:text-blue-400 transition border border-border px-5 py-2 rounded-lg hover:border-blue-500">
         Load more
       </button>

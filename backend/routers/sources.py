@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import WorkspaceContext, get_workspace
 from ..database import get_service_db
-from ..models.schemas import SourceCreate, SourceUpdate
+from ..models.schemas import MentionsConfigUpdate, SourceCreate, SourceUpdate
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -59,6 +59,24 @@ async def create_source(source: SourceCreate, ws: WorkspaceContext = Depends(get
 @router.put("/{source_id}")
 async def update_source(source_id: str, source: SourceUpdate, ws: WorkspaceContext = Depends(get_workspace)):
     data = {k: v for k, v in source.model_dump().items() if v is not None}
+    if not data:
+        raise HTTPException(400, "No fields to update.")
+    db = get_service_db()
+    result = await asyncio.to_thread(
+        lambda: db.table("sources").update(data)
+        .eq("id", source_id).eq("workspace_id", ws.workspace_id).execute()
+    )
+    if not result.data:
+        raise HTTPException(404, "Source not found.")
+    return result.data[0]
+
+
+@router.patch("/{source_id}/mentions-config")
+async def update_mentions_config(source_id: str, body: MentionsConfigUpdate,
+                                 ws: WorkspaceContext = Depends(get_workspace)):
+    """Set Reddit mention-monitoring config (terms, subreddits, enabled) for a
+    competitor source."""
+    data = {k: v for k, v in body.model_dump().items() if v is not None}
     if not data:
         raise HTTPException(400, "No fields to update.")
     db = get_service_db()

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
-from .routers import insights, scraper, sources
+from .routers import insights, mentions, scraper, sources
 from .routers.auth_router import router as auth_router
 from .routers.workspaces import router as workspaces_router
 from .routers.settings import router as settings_router
@@ -33,6 +33,7 @@ app = FastAPI(title="RIvals", lifespan=lifespan)
 app.include_router(sources.router,    prefix="/api/sources",    tags=["sources"])
 app.include_router(scraper.router,    prefix="/api/scraper",    tags=["scraper"])
 app.include_router(insights.router,   prefix="/api/insights",   tags=["insights"])
+app.include_router(mentions.router,   prefix="/api/mentions",   tags=["mentions"])
 app.include_router(auth_router,       prefix="/api",            tags=["auth"])
 app.include_router(workspaces_router, prefix="/api/workspaces", tags=["workspaces"])
 app.include_router(settings_router,   prefix="/api/settings",   tags=["settings"])

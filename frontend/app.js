@@ -13,6 +13,7 @@
     if (name === 'settings')    loadSettings();
     if (name === 'changes')     loadCompetitorChanges();
     if (name === 'chat')        loadPositioningCanvas();
+    if (name === 'mentions')    loadMentions(true);
   }
 
   // ── Supabase auth ─────────────────────────────────────────
@@ -844,6 +845,174 @@
 
   async function loadMoreNews() { await loadNews(false); }
 
+  // ── Reddit Mentions ──────────────────────────────────
+  let _mentionsItems           = [];
+  let _mentionsOffset          = 0;
+  const _mentionsLimit         = 30;
+  let _mentionsSources         = [];   // competitor sources with mentions tracking enabled
+  let _mentionsSourceSelected  = null; // null = all competitors
+  let _mentionsSwitchingOnly   = false;
+
+  async function loadMentions(reset = true) {
+    if (reset) { _mentionsOffset = 0; _mentionsItems = []; }
+    const feed = document.getElementById('mentions-feed');
+    if (reset) feed.innerHTML = '<p class="text-slate-400 text-sm">Loading…</p>';
+    try {
+      const qs = { limit: _mentionsLimit, offset: _mentionsOffset };
+      if (_mentionsSourceSelected) qs.source_id = _mentionsSourceSelected;
+      if (_mentionsSwitchingOnly) {
+        qs.signal_type = 'switching_intent';
+      } else {
+        const signal = document.getElementById('mentions-signal-filter').value;
+        if (signal) qs.signal_type = signal;
+      }
+
+      const tasks = [api(`/api/mentions/?${new URLSearchParams(qs)}`)];
+      if (reset) tasks.push(loadMentionsSummary(), loadMentionsSourcePills());
+      const [items] = await Promise.all(tasks);
+      _mentionsItems  = reset ? items : [..._mentionsItems, ...items];
+      _mentionsOffset += items.length;
+      renderMentionsFeed(_mentionsItems);
+      document.getElementById('mentions-load-more').classList.toggle('hidden', items.length < _mentionsLimit);
+    } catch (e) {
+      feed.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    }
+  }
+
+  async function loadMoreMentions() { await loadMentions(false); }
+
+  function applyMentionsFilters() { loadMentions(true); }
+
+  function toggleSwitchingIntentFilter() {
+    _mentionsSwitchingOnly = !_mentionsSwitchingOnly;
+    const btn = document.getElementById('mentions-switching-btn');
+    btn.className = _mentionsSwitchingOnly
+      ? 'text-xs font-semibold px-3 py-1.5 rounded-lg border border-amber-500 bg-amber-500 text-white transition'
+      : 'text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition';
+    loadMentions(true);
+  }
+
+  async function loadMentionsSourcePills() {
+    try {
+      const all = await api('/api/sources/');
+      _mentionsSources = all.filter(s => s.category === 'competitor' && s.mentions_enabled);
+    } catch (e) {
+      _mentionsSources = [];
+    }
+    renderMentionsSourcePills();
+  }
+
+  function renderMentionsSourcePills() {
+    const el = document.getElementById('mentions-source-pills');
+    if (_mentionsSources.length < 2) { el.innerHTML = ''; return; }
+    const allActive = _mentionsSourceSelected === null;
+    const pills = [`<button onclick="setMentionsSource(null)" class="news-cat-btn${allActive ? ' active' : ''}">All competitors</button>`];
+    for (const src of _mentionsSources) {
+      const active = _mentionsSourceSelected === src.id;
+      pills.push(`<button onclick="setMentionsSource('${src.id}')" class="news-cat-btn${active ? ' active' : ''}">${esc(src.name)}</button>`);
+    }
+    el.innerHTML = pills.join('');
+  }
+
+  function setMentionsSource(sourceId) {
+    _mentionsSourceSelected = sourceId;
+    renderMentionsSourcePills();
+    loadMentions(true);
+  }
+
+  async function loadMentionsSummary() {
+    try {
+      const data = await api('/api/mentions/summary');
+      renderMentionsSummary(data.results || []);
+    } catch (e) {
+      document.getElementById('mentions-summary').innerHTML = '';
+    }
+  }
+
+  function renderMentionsSummary(results) {
+    const el = document.getElementById('mentions-summary');
+    if (!results.length) {
+      el.innerHTML = `<p class="text-slate-500 text-sm sm:col-span-2">No competitor sources yet. Add one, then enable "Track Reddit mentions" from its Edit Source form.</p>`;
+      return;
+    }
+    el.innerHTML = results.map(r => {
+      if (r.insufficient) {
+        return `<div class="bg-card border border-border rounded-xl p-4">
+          <p class="font-semibold text-slate-900 text-sm mb-1">${esc(r.source_name)}</p>
+          <p class="text-xs text-slate-500">Not enough signal yet (${r.n} mention${r.n !== 1 ? 's' : ''} so far — need 5+)</p>
+        </div>`;
+      }
+      const sentiment    = r.weighted_sentiment;
+      const sentimentStr = sentiment == null ? '—' : sentiment.toFixed(2);
+      const sentimentCol = sentiment == null ? 'text-slate-500'
+        : sentiment > 0.15 ? 'text-emerald-600' : sentiment < -0.15 ? 'text-red-600' : 'text-slate-600';
+      return `<div class="bg-card border border-border rounded-xl p-4">
+        <div class="flex items-center justify-between mb-1">
+          <p class="font-semibold text-slate-900 text-sm">${esc(r.source_name)}</p>
+          <span class="text-xs text-slate-500">${r.n} mention${r.n !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1.5 flex-wrap">
+          <span class="text-xs font-medium ${sentimentCol}">Sentiment ${sentimentStr}</span>
+          ${r.switching_intent_count > 0 ? `<span class="text-xs font-semibold text-amber-600">⚠ ${r.switching_intent_count} switching</span>` : ''}
+          ${r.top_negative_aspect ? `<span class="text-xs text-slate-500">Top complaint: ${esc(r.top_negative_aspect)}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  const _MENTIONS_SIGNAL_LABELS = {
+    complaint: 'Complaint', praise: 'Praise', question: 'Question',
+    comparison: 'Comparison', switching_intent: 'Switching intent', other: 'Other',
+  };
+
+  function _sentimentChip(sentiment) {
+    if (sentiment == null) return '';
+    const label = sentiment > 0.15 ? 'Positive' : sentiment < -0.15 ? 'Negative' : 'Neutral';
+    const cls = sentiment > 0.15
+      ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+      : sentiment < -0.15
+        ? 'bg-red-500/15 text-red-600 border-red-500/30'
+        : 'bg-slate-500/15 text-slate-600 border-slate-500/30';
+    return `<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${cls}">${label} ${sentiment.toFixed(2)}</span>`;
+  }
+
+  function _signalChip(signalType) {
+    if (!signalType) return '';
+    const cls = signalType === 'switching_intent'
+      ? 'bg-amber-500/15 text-amber-700 border-amber-500/30'
+      : signalType === 'complaint'
+        ? 'bg-red-500/10 text-red-600 border-red-500/25'
+        : signalType === 'praise'
+          ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/25'
+          : 'bg-slate-500/10 text-slate-600 border-slate-500/25';
+    return `<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${cls}">${_MENTIONS_SIGNAL_LABELS[signalType] || signalType}</span>`;
+  }
+
+  function renderMentionsFeed(items) {
+    const feed = document.getElementById('mentions-feed');
+    if (!items.length) {
+      feed.innerHTML = '<p class="text-slate-500 text-sm">No mentions yet. Enable mention tracking on a competitor and run a sweep.</p>';
+      return;
+    }
+    const srcMap = Object.fromEntries(_mentionsSources.map(s => [s.id, s]));
+    feed.innerHTML = items.map(m => {
+      const srcName = srcMap[m.source_id]?.name || '';
+      return `<a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer"
+        class="block bg-card border border-border rounded-xl p-4 hover:border-blue-400 transition">
+        <div class="flex items-center gap-2 flex-wrap mb-1.5">
+          ${srcName ? `<span class="text-xs font-semibold text-slate-500">${esc(srcName)}</span>` : ''}
+          <span class="text-xs text-slate-400">r/${esc(m.subreddit || '')}</span>
+          ${_sentimentChip(m.sentiment)}
+          ${_signalChip(m.signal_type)}
+          ${m.aspect ? `<span class="text-xs text-slate-400">${esc(m.aspect)}</span>` : ''}
+          <span class="text-xs text-slate-400 ml-auto">${fmtDate(m.published_at)}</span>
+        </div>
+        <p class="text-sm text-slate-900 font-medium truncate">${esc(m.title || '')}</p>
+        ${m.summary ? `<p class="text-sm text-slate-500 mt-1 leading-relaxed">${esc(m.summary)}</p>` : ''}
+      </a>`;
+    }).join('');
+  }
+
   // ── My Company ──────────────────────────────────────
   async function loadOwnSources() {
     const el       = document.getElementById('own-sources-list');
@@ -1161,6 +1330,11 @@
     }
   }
 
+  function toggleMentionsSection() {
+    const category = document.getElementById('edit-src-category').value;
+    document.getElementById('edit-src-mentions-section').classList.toggle('hidden', category !== 'competitor');
+  }
+
   function openEditSourceModal(sourceId) {
     const src = _sourcesCache.find(s => s.id === sourceId);
     if (!src) { showToast('Source not found — try reloading the list.', true); return; }
@@ -1171,6 +1345,10 @@
     document.getElementById('edit-src-interval').value = src.scrape_interval || 24;
     document.getElementById('edit-src-scope').value = src.crawl_scope || 'domain';
     document.getElementById('edit-src-sitemap').value = src.sitemap_url || '';
+    document.getElementById('edit-src-mentions-enabled').checked = !!src.mentions_enabled;
+    document.getElementById('edit-src-mention-terms').value = (src.mention_terms || []).join(', ');
+    document.getElementById('edit-src-mention-subreddits').value = (src.mention_subreddits || []).join(', ');
+    toggleMentionsSection();
     const st = document.getElementById('edit-src-status');
     st.className = 'text-sm hidden';
     st.textContent = '';
@@ -1203,6 +1381,21 @@
         method: 'PUT',
         body: JSON.stringify({ name, url, category, scrape_interval: interval || 24, crawl_scope: scope, sitemap_url: sitemap }),
       });
+      if (category === 'competitor') {
+        const mentionsEnabled = document.getElementById('edit-src-mentions-enabled').checked;
+        const terms = document.getElementById('edit-src-mention-terms').value
+          .split(',').map(t => t.trim()).filter(Boolean);
+        const subreddits = document.getElementById('edit-src-mention-subreddits').value
+          .split(',').map(s => s.trim().replace(/^r\//i, '')).filter(Boolean);
+        await api(`/api/sources/${_editSourceId}/mentions-config`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            mentions_enabled: mentionsEnabled,
+            mention_terms: terms,
+            mention_subreddits: subreddits,
+          }),
+        });
+      }
       closeEditSourceModal();
       showToast('Source updated.');
       loadSources();
