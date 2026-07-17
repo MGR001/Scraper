@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     max_summaries_per_sweep: int = 400
     contact_email: str = "contact@example.com"  # Reddit User-Agent contact — required by their API rules
     classifier_model: str = "gpt-4o-mini"  # cheap model for high-volume mention classification
+    max_mention_classifications_per_sweep: int = 200
 
     model_config = {"env_file": ".env"}
 

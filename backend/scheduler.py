@@ -12,6 +12,7 @@ async def _check_and_scrape() -> None:
     # The scheduler uses the service-role client — it has no user JWT.
     # This is the ONE place the service key legitimately bypasses RLS.
     from .database import get_service_db
+    from .services.mention_monitor import check_mentions_for_workspace
     from .services.scraper import scrape_source
 
     db = get_service_db()
@@ -69,6 +70,13 @@ async def _check_and_scrape() -> None:
                 except Exception as exc:
                     logger.error("Scheduler scrape failed for %s (ws=%s): %s",
                                  source["url"], ws_id, exc)
+
+        try:
+            mention_counts = await check_mentions_for_workspace(db, ws_id)
+            if mention_counts.get("fetched") or mention_counts.get("classified"):
+                logger.info("Scheduler mentions sweep (ws=%s): %s", ws_id, mention_counts)
+        except Exception as exc:
+            logger.error("Scheduler mentions sweep failed (ws=%s): %s", ws_id, exc)
 
 
 async def _loop() -> None:
