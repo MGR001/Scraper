@@ -15,7 +15,124 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-async def _combine_own_company(db, workspace_id: str, build_content, max_chars: int = 2000) -> dict | None:
+_PAGE_TYPE_TIER = {"home": 0, "pricing": 0, "product": 1, "solutions": 1, "customers": 1}
+_ALWAYS_KEEP_TYPES = {"home", "pricing"}
+
+# Query embeddings are static per string — cache in-process rather than
+# re-embedding the same short query on every framework call.
+_query_embedding_cache: dict[str, list[float]] = {}
+
+
+async def _cached_query_embedding(query: str) -> list[float]:
+    if query not in _query_embedding_cache:
+        _query_embedding_cache[query] = await get_embedding(query)
+    return _query_embedding_cache[query]
+
+
+async def _build_content_from_chunks(db, src: dict, limit: int = 15, max_chars: int = 8000) -> str:
+    """Recency-ordered raw-chunk fallback, used only for sources that haven't
+    been backfilled into page_summaries yet (see build_company_context)."""
+    content_res = await asyncio.to_thread(
+        lambda: db.table("scraped_content")
+        .select("content, url")
+        .eq("source_id", src["id"])
+        .order("scraped_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    seen: set[str] = set()
+    parts: list[str] = []
+    total = 0
+    for row in (content_res.data or []):
+        chunk = (row.get("content") or "").strip()
+        if not chunk or chunk in seen:
+            continue
+        seen.add(chunk)
+        chunk_url = row.get("url") or src["url"]
+        parts.append(f"(Source URL: {chunk_url})\n{chunk[:800]}")
+        total += len(chunk)
+        if total >= max_chars:
+            break
+    return "\n\n".join(parts) or "No content scraped yet."
+
+
+async def build_company_context(
+    db, src: dict, page_types: list[str] | None = None, max_chars: int = 8000,
+    selection_query: str | None = None,
+) -> str:
+    """
+    Build a company's context block from its page_summaries: complete, typed,
+    per-page summaries instead of arbitrary recency-ordered chunk fragments.
+    Ordered home/pricing first, then product/solutions/customers, then the
+    rest by recency. Each entry keeps the "(Source URL: url)\\nsummary" prefix
+    format the framework prompts already instruct the model to cite as
+    evidence links. Falls back to raw chunks if the source has no summaries
+    yet (not backfilled) so nothing breaks mid-migration.
+
+    For large sources where the filtered set still exceeds max_chars by more
+    than 2x, selection_query (a short framework-specific query string) ranks
+    summaries by semantic relevance via match_page_summaries and keeps the
+    top ones that fit — home/pricing are always kept regardless of rank.
+    """
+    query = db.table("page_summaries").select("url, summary, page_type, updated_at").eq("source_id", src["id"])
+    if page_types:
+        query = query.in_("page_type", page_types)
+    res = await asyncio.to_thread(lambda: query.execute())
+    rows = res.data or []
+
+    if page_types and len(rows) < 3:
+        # Small sites won't have typed coverage for a narrow filter — widen to everything.
+        all_res = await asyncio.to_thread(
+            lambda: db.table("page_summaries")
+            .select("url, summary, page_type, updated_at")
+            .eq("source_id", src["id"])
+            .execute()
+        )
+        rows = all_res.data or rows
+
+    if not rows:
+        return await _build_content_from_chunks(db, src, max_chars=max_chars)
+
+    rows.sort(key=lambda r: r.get("updated_at") or "", reverse=True)
+    rows.sort(key=lambda r: _PAGE_TYPE_TIER.get(r.get("page_type"), 2))
+
+    total_summary_chars = sum(len(r["summary"]) for r in rows)
+    if selection_query and total_summary_chars > max_chars * 2:
+        try:
+            query_embedding = await _cached_query_embedding(selection_query)
+            match_res = await asyncio.to_thread(
+                lambda: db.rpc("match_page_summaries", {
+                    "query_embedding": query_embedding,
+                    "match_threshold": 0.0,
+                    "match_count": max(len(rows), 50),
+                    "p_source_id": src["id"],
+                }).execute()
+            )
+            rank = {m["url"]: i for i, m in enumerate(match_res.data or [])}
+            rows.sort(key=lambda r: (
+                0 if r.get("page_type") in _ALWAYS_KEEP_TYPES else 1,
+                rank.get(r["url"], len(rank)),
+            ))
+        except Exception as exc:
+            logger.warning("Semantic summary selection failed for source %s, using recency order: %s",
+                           src["id"], exc)
+
+    parts: list[str] = []
+    total = 0
+    for r in rows:
+        entry = f"(Source URL: {r['url']})\n{r['summary']}"
+        if parts and total + len(entry) > max_chars:
+            break
+        parts.append(entry)
+        total += len(entry)
+
+    return "\n\n".join(parts) or "No content scraped yet."
+
+
+async def _combine_own_company(
+    db, workspace_id: str, page_types: list[str] | None = None, max_chars: int = 8000,
+    selection_query: str | None = None,
+) -> dict | None:
     """
     A workspace's own company can span multiple 'own'-category sources (main
     site, docs, blog, etc.) — combine content from ALL of them into one
@@ -33,10 +150,12 @@ async def _combine_own_company(db, workspace_id: str, build_content, max_chars: 
     if not own_sources:
         return None
 
-    per_source_chars = max(400, max_chars // len(own_sources))
+    per_source_chars = max(800, max_chars // len(own_sources))
     parts = []
     for src in own_sources:
-        chunk = await build_content(src, max_chars=per_source_chars)
+        chunk = await build_company_context(
+            db, src, page_types=page_types, max_chars=per_source_chars, selection_query=selection_query,
+        )
         if chunk and chunk != "No content scraped yet.":
             parts.append(f"### {src['name']} ({src['url']})\n{chunk}")
 
@@ -114,32 +233,9 @@ async def competitive_comparison(ws: WorkspaceContext = Depends(get_workspace)):
             "Generate individual summaries first using \"Generate All\".",
         )
 
-    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
-        content_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scraped_content")
-            .select("content")
-            .eq("source_id", sid)
-            .order("scraped_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        seen: set[str] = set()
-        parts: list[str] = []
-        total = 0
-        for row in (content_res.data or []):
-            chunk = (row.get("content") or "").strip()
-            if not chunk or chunk in seen:
-                continue
-            seen.add(chunk)
-            parts.append(chunk[:400])
-            total += len(chunk)
-            if total >= max_chars:
-                break
-        return "\n\n".join(parts) or "No content scraped yet."
-
     # Own company doesn't need a pre-generated summary like competitors do —
-    # pull it from live scraped content so it's always included if present.
-    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+    # pull it from page_summaries (all types) so it's always included if present.
+    own_company = await _combine_own_company(db, ws.workspace_id)
 
     result = await generate_comparison(sources_with_summaries, own_company=own_company)
     if own_company:
@@ -167,30 +263,10 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
     if not sources:
         return {"results": [], "error": "No active competitor or company sources found."}
 
-    async def _build_own_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
-        content_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scraped_content")
-            .select("content")
-            .eq("source_id", sid)
-            .order("scraped_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        seen: set[str] = set()
-        parts: list[str] = []
-        total = 0
-        for row in (content_res.data or []):
-            chunk = (row.get("content") or "").strip()
-            if not chunk or chunk in seen:
-                continue
-            seen.add(chunk)
-            parts.append(chunk[:400])
-            total += len(chunk)
-            if total >= max_chars:
-                break
-        return "\n\n".join(parts) or "No content scraped yet."
-
-    own_company = await _combine_own_company(db, ws.workspace_id, _build_own_content)
+    # Note: this own_company is only used to ground change-relevance commentary
+    # below — the actual diffing (recent_chunks/old_chunks per source) stays on
+    # raw scraped_content chunks, untouched by the page_summaries migration.
+    own_company = await _combine_own_company(db, ws.workspace_id)
 
     # Fixed 5-day comparison window: "current" is the latest finished scrape no
     # matter how recent, "baseline" is the most recent finished scrape from at
@@ -306,39 +382,19 @@ async def gtm_heatmap(ws: WorkspaceContext = Depends(get_workspace)):
             "No active competitor sources found. Add competitors in the Sources tab first.",
         )
 
-    async def _build_content(src: dict, limit: int = 18, max_chars: int = 2400) -> str:
-        content_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scraped_content")
-            .select("content")
-            .eq("source_id", sid)
-            .order("scraped_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        seen: set[str] = set()
-        parts: list[str] = []
-        total = 0
-        for row in (content_res.data or []):
-            chunk = (row.get("content") or "").strip()
-            if not chunk or chunk in seen:
-                continue
-            seen.add(chunk)
-            parts.append(chunk[:400])
-            total += len(chunk)
-            if total >= max_chars:
-                break
-        return "\n\n".join(parts) or "No content scraped yet."
+    GTM_PAGE_TYPES = ["home", "solutions", "pricing", "customers"]
+    GTM_QUERY = "target market segments, pricing model, customer types, sales motion"
 
     competitors_data = []
     for src in sources:
         competitors_data.append({
             "name": src["name"],
             "url": src["url"],
-            "content_summary": await _build_content(src),
+            "content_summary": await build_company_context(db, src, page_types=GTM_PAGE_TYPES, selection_query=GTM_QUERY),
         })
 
     # Include own company as baseline reference if available
-    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+    own_company = await _combine_own_company(db, ws.workspace_id, page_types=GTM_PAGE_TYPES, selection_query=GTM_QUERY)
 
     result = await generate_gtm_heatmap(competitors_data, own_company=own_company)
     # Flag own company competitor so frontend can highlight it
@@ -367,39 +423,21 @@ async def positioning_teardown(ws: WorkspaceContext = Depends(get_workspace)):
     if not sources:
         raise HTTPException(400, "No active competitor sources found. Add competitors in the Sources tab first.")
 
-    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
-        content_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scraped_content")
-            .select("content")
-            .eq("source_id", sid)
-            .order("scraped_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        seen: set[str] = set()
-        parts: list[str] = []
-        total = 0
-        for row in (content_res.data or []):
-            chunk = (row.get("content") or "").strip()
-            if not chunk or chunk in seen:
-                continue
-            seen.add(chunk)
-            parts.append(chunk[:400])
-            total += len(chunk)
-            if total >= max_chars:
-                break
-        return "\n\n".join(parts) or "No content scraped yet."
+    POSITIONING_PAGE_TYPES = ["home", "about", "product", "solutions", "customers"]
+    POSITIONING_QUERY = "positioning claims, target market, competitive differentiation"
 
     competitors_data = []
     for src in sources:
         competitors_data.append({
             "name": src["name"],
             "url": src["url"],
-            "content_summary": await _build_content(src),
+            "content_summary": await build_company_context(
+                db, src, page_types=POSITIONING_PAGE_TYPES, selection_query=POSITIONING_QUERY),
         })
 
     # Include own company as the reference baseline if available
-    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+    own_company = await _combine_own_company(
+        db, ws.workspace_id, page_types=POSITIONING_PAGE_TYPES, selection_query=POSITIONING_QUERY)
 
     return await generate_positioning_teardown(competitors_data, own_company=own_company)
 
@@ -422,38 +460,20 @@ async def positioning_canvas(ws: WorkspaceContext = Depends(get_workspace)):
     if not sources:
         raise HTTPException(400, "No active competitor sources found. Add competitors in the Sources tab first.")
 
-    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
-        content_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scraped_content")
-            .select("content")
-            .eq("source_id", sid)
-            .order("scraped_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        seen: set[str] = set()
-        parts: list[str] = []
-        total = 0
-        for row in (content_res.data or []):
-            chunk = (row.get("content") or "").strip()
-            if not chunk or chunk in seen:
-                continue
-            seen.add(chunk)
-            parts.append(chunk[:400])
-            total += len(chunk)
-            if total >= max_chars:
-                break
-        return "\n\n".join(parts) or "No content scraped yet."
+    CANVAS_PAGE_TYPES = ["home", "about", "product", "solutions", "customers"]
+    CANVAS_QUERY = "positioning claims, target market, competitive differentiation"
 
     competitors_data = []
     for src in sources:
         competitors_data.append({
             "name": src["name"],
             "url": src["url"],
-            "content_summary": await _build_content(src),
+            "content_summary": await build_company_context(
+                db, src, page_types=CANVAS_PAGE_TYPES, selection_query=CANVAS_QUERY),
         })
 
-    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+    own_company = await _combine_own_company(
+        db, ws.workspace_id, page_types=CANVAS_PAGE_TYPES, selection_query=CANVAS_QUERY)
 
     return await generate_positioning_canvas(competitors_data, own_company=own_company)
 
@@ -476,76 +496,24 @@ async def feature_matrix(ws: WorkspaceContext = Depends(get_workspace)):
     if not sources:
         raise HTTPException(400, "No active competitor sources found. Add competitors in the Sources tab first.")
 
-    # Semantic retrieval: with sources now holding hundreds of scraped pages each,
-    # pulling the most-recently-scraped dozen was an almost-random sample (often
-    # only 1-2 pages actually fit the old char cap). Instead, embed one query about
-    # what a feature/claim matrix cares about and pull the chunks each source
-    # actually has that are relevant to it, via the existing match_content vector
-    # search (already used for chat RAG) — one embedding + one workspace-scoped
-    # RPC call, then grouped per source client-side.
-    FEATURE_QUERY = (
-        "product features, capabilities, integrations, pricing and plans, "
-        "certifications, guarantees, security and compliance"
-    )
-    semantic_by_source: dict[str, list[dict]] = {}
-    try:
-        query_embedding = await get_embedding(FEATURE_QUERY)
-        matches_res = await asyncio.to_thread(
-            lambda: db.rpc("match_content", {
-                "query_embedding": query_embedding,
-                "match_threshold": 0.15,
-                "match_count": 600,
-                "p_workspace_id": ws.workspace_id,
-            }).execute()
-        )
-        for row in (matches_res.data or []):
-            semantic_by_source.setdefault(row["source_id"], []).append(row)
-    except Exception as exc:
-        logger.error("Feature matrix semantic retrieval failed, falling back to recency: %s", exc)
-
-    async def _build_content(src: dict, limit: int = 15, max_chars: int = 8000) -> str:
-        # Tag each chunk with the exact page URL it came from (scraped_content.url,
-        # not just the source's root url) so the AI can cite a specific source URL
-        # per feature/company cell for the frontend's evidence hover.
-        rows = semantic_by_source.get(src["id"], [])[:limit]
-        if not rows:
-            # No semantic matches for this source (too few pages, or everything fell
-            # below the similarity threshold) — fall back to its most recent content
-            # rather than leaving it with nothing.
-            content_res = await asyncio.to_thread(
-                lambda sid=src["id"]: db.table("scraped_content")
-                .select("content, url")
-                .eq("source_id", sid)
-                .order("scraped_at", desc=True)
-                .limit(limit)
-                .execute()
-            )
-            rows = content_res.data or []
-
-        seen: set[str] = set()
-        parts: list[str] = []
-        total = 0
-        for row in rows:
-            chunk = (row.get("content") or "").strip()
-            if not chunk or chunk in seen:
-                continue
-            seen.add(chunk)
-            chunk_url = row.get("url") or src["url"]
-            parts.append(f"(Source URL: {chunk_url})\n{chunk[:800]}")
-            total += len(chunk)
-            if total >= max_chars:
-                break
-        return "\n\n".join(parts) or "No content scraped yet."
+    # page_summaries already give one typed, complete summary per page (see
+    # build_company_context) — feature/pricing claims live on product, solutions,
+    # pricing and home pages, and each entry keeps its exact source URL for the
+    # frontend's per-cell evidence hover.
+    FEATURE_PAGE_TYPES = ["product", "solutions", "pricing", "home"]
+    FEATURE_QUERY = "product features, capabilities, integrations, pricing tiers"
 
     competitors_data = []
     for src in sources:
         competitors_data.append({
             "name": src["name"],
             "url": src["url"],
-            "content_summary": await _build_content(src),
+            "content_summary": await build_company_context(
+                db, src, page_types=FEATURE_PAGE_TYPES, max_chars=8000, selection_query=FEATURE_QUERY),
         })
 
-    own_company = await _combine_own_company(db, ws.workspace_id, _build_content, max_chars=8000)
+    own_company = await _combine_own_company(
+        db, ws.workspace_id, page_types=FEATURE_PAGE_TYPES, max_chars=8000, selection_query=FEATURE_QUERY)
 
     ws_res = await asyncio.to_thread(
         lambda: db.table("workspaces").select("feature_matrix_categories").eq("id", ws.workspace_id).execute()
@@ -574,38 +542,20 @@ async def kano_analysis(ws: WorkspaceContext = Depends(get_workspace)):
     if not sources:
         raise HTTPException(400, "No active competitor sources found. Add competitors in the Sources tab first.")
 
-    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
-        content_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scraped_content")
-            .select("content")
-            .eq("source_id", sid)
-            .order("scraped_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        seen: set[str] = set()
-        parts: list[str] = []
-        total = 0
-        for row in (content_res.data or []):
-            chunk = (row.get("content") or "").strip()
-            if not chunk or chunk in seen:
-                continue
-            seen.add(chunk)
-            parts.append(chunk[:400])
-            total += len(chunk)
-            if total >= max_chars:
-                break
-        return "\n\n".join(parts) or "No content scraped yet."
+    KANO_PAGE_TYPES = ["product", "solutions", "customers", "blog"]
+    KANO_QUERY = "product features, customer needs, differentiators"
 
     competitors_data = []
     for src in sources:
         competitors_data.append({
             "name": src["name"],
             "url": src["url"],
-            "content_summary": await _build_content(src),
+            "content_summary": await build_company_context(
+                db, src, page_types=KANO_PAGE_TYPES, selection_query=KANO_QUERY),
         })
 
-    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+    own_company = await _combine_own_company(
+        db, ws.workspace_id, page_types=KANO_PAGE_TYPES, selection_query=KANO_QUERY)
 
     return await generate_kano_analysis(competitors_data, own_company=own_company)
 
@@ -628,38 +578,20 @@ async def campaign_messaging(ws: WorkspaceContext = Depends(get_workspace)):
     if not sources:
         raise HTTPException(400, "No active competitor sources found. Add competitors in the Sources tab first.")
 
-    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
-        content_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scraped_content")
-            .select("content")
-            .eq("source_id", sid)
-            .order("scraped_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        seen: set[str] = set()
-        parts: list[str] = []
-        total = 0
-        for row in (content_res.data or []):
-            chunk = (row.get("content") or "").strip()
-            if not chunk or chunk in seen:
-                continue
-            seen.add(chunk)
-            parts.append(chunk[:400])
-            total += len(chunk)
-            if total >= max_chars:
-                break
-        return "\n\n".join(parts) or "No content scraped yet."
+    CAMPAIGN_PAGE_TYPES = ["home", "pricing", "product", "blog"]
+    CAMPAIGN_QUERY = "marketing messaging, pricing, product benefits, blog themes"
 
     competitors_data = []
     for src in sources:
         competitors_data.append({
             "name": src["name"],
             "url": src["url"],
-            "content_summary": await _build_content(src),
+            "content_summary": await build_company_context(
+                db, src, page_types=CAMPAIGN_PAGE_TYPES, selection_query=CAMPAIGN_QUERY),
         })
 
-    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+    own_company = await _combine_own_company(
+        db, ws.workspace_id, page_types=CAMPAIGN_PAGE_TYPES, selection_query=CAMPAIGN_QUERY)
 
     return await generate_campaign_messaging(competitors_data, own_company=own_company)
 
@@ -680,38 +612,20 @@ async def messaging_house(ws: WorkspaceContext = Depends(get_workspace)):
     )
     sources = sources_res.data or []
 
-    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
-        content_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scraped_content")
-            .select("content")
-            .eq("source_id", sid)
-            .order("scraped_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        seen: set[str] = set()
-        parts: list[str] = []
-        total = 0
-        for row in (content_res.data or []):
-            chunk = (row.get("content") or "").strip()
-            if not chunk or chunk in seen:
-                continue
-            seen.add(chunk)
-            parts.append(chunk[:400])
-            total += len(chunk)
-            if total >= max_chars:
-                break
-        return "\n\n".join(parts) or "No content scraped yet."
+    MESSAGING_HOUSE_PAGE_TYPES = ["home", "product", "solutions"]
+    MESSAGING_HOUSE_QUERY = "brand positioning, tagline, value proposition, target audience"
 
     competitors_data = []
     for src in sources:
         competitors_data.append({
             "name": src["name"],
             "url": src["url"],
-            "content_summary": await _build_content(src),
+            "content_summary": await build_company_context(
+                db, src, page_types=MESSAGING_HOUSE_PAGE_TYPES, selection_query=MESSAGING_HOUSE_QUERY),
         })
 
-    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+    own_company = await _combine_own_company(
+        db, ws.workspace_id, page_types=MESSAGING_HOUSE_PAGE_TYPES, selection_query=MESSAGING_HOUSE_QUERY)
     if not own_company:
         raise HTTPException(400, "Add your own company in the My Company tab first.")
 
@@ -736,38 +650,20 @@ async def battlecards(ws: WorkspaceContext = Depends(get_workspace)):
     if not sources:
         raise HTTPException(400, "No active competitor sources found. Add competitors in the Sources tab first.")
 
-    async def _build_content(src: dict, limit: int = 12, max_chars: int = 2000) -> str:
-        content_res = await asyncio.to_thread(
-            lambda sid=src["id"]: db.table("scraped_content")
-            .select("content")
-            .eq("source_id", sid)
-            .order("scraped_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        seen: set[str] = set()
-        parts: list[str] = []
-        total = 0
-        for row in (content_res.data or []):
-            chunk = (row.get("content") or "").strip()
-            if not chunk or chunk in seen:
-                continue
-            seen.add(chunk)
-            parts.append(chunk[:400])
-            total += len(chunk)
-            if total >= max_chars:
-                break
-        return "\n\n".join(parts) or "No content scraped yet."
+    BATTLECARD_PAGE_TYPES = ["pricing", "product", "customers", "home"]
+    BATTLECARD_QUERY = "pricing tiers, product capabilities, customer proof"
 
     competitors_data = []
     for src in sources:
         competitors_data.append({
             "name": src["name"],
             "url": src["url"],
-            "content_summary": await _build_content(src),
+            "content_summary": await build_company_context(
+                db, src, page_types=BATTLECARD_PAGE_TYPES, selection_query=BATTLECARD_QUERY),
         })
 
-    own_company = await _combine_own_company(db, ws.workspace_id, _build_content)
+    own_company = await _combine_own_company(
+        db, ws.workspace_id, page_types=BATTLECARD_PAGE_TYPES, selection_query=BATTLECARD_QUERY)
     if not own_company:
         raise HTTPException(400, "Add your own company in the My Company tab first.")
 
