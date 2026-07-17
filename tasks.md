@@ -1,241 +1,225 @@
-# StrategyHub — Improvement Tasks
+# Rivalry — Reddit Sentiment Ingestion (tasks-reddit.md)
 
-Work through these in order. Each task is self-contained; complete, verify, and commit before moving to the next. Repo structure: FastAPI backend in `backend/`, single-page frontend in `frontend/index.html`, DB schema in `supabase_setup.sql`, Supabase (pgvector) + OpenAI.
+Build the mentions pipeline: poll Reddit for posts and comments that mention watched competitors, classify each mention (relevance, sentiment, aspect, signal type), and store them as structured rows in a new `mentions` table. This is the customer-voice layer — it feeds the sentiment heatmap, the digest, and (later) Kano/battlecard evidence.
 
----
+**Hard rules for this whole file:**
+- Use Reddit's **JSON endpoints** (`*.json`), never scrape the HTML UI.
+- **Never** route Reddit content through the scraper→chunks→embeddings pipeline. Mentions are structured data with their own table and their own classifier.
+- Every Reddit request sends a descriptive User-Agent: `Rivalry/1.0 (competitive intelligence; <contact email from env>)`. Reddit blocks default agents.
+- Max ~1 request/second, unauthenticated. Build the client so OAuth can be added later without touching callers.
 
-## Task 1 — Fix schema drift (CRITICAL)
-
-**Problem:** Code writes columns that don't exist in `supabase_setup.sql`, so a fresh install crashes.
-- `backend/services/scraper.py` (`scrape_source`) updates `sources.sitemap_url`
-- `backend/routers/insights.py` (`summarise_source`) updates `sources.summary` and `sources.summary_generated_at`
-
-**Do:**
-1. Add to `supabase_setup.sql` on the `sources` table: `sitemap_url text`, `summary text`, `summary_generated_at timestamptz`.
-2. Also create a separate idempotent migration snippet (`alter table ... add column if not exists ...`) at the bottom of the file (or a new `migrations.sql`) so existing databases can be upgraded.
-
-**Verify:** Running the full SQL file on a fresh Supabase project succeeds; grep the codebase for every `.update({...})` on `sources` and confirm each column exists in the schema.
+Work through tasks in order; complete, verify, commit each.
 
 ---
 
-## Task 2 — Add scrape sessions table & fix change detection (CRITICAL)
+## Task 1 — Schema: `mentions` + monitoring config
 
-**Problem:** `_store_content_chunks` (in `backend/services/scraper.py`) skips chunks whose `content_hash` already exists, so rescraping unchanged pages inserts zero rows. `competitor_changes` in `backend/routers/insights.py` infers "sessions" from `scraped_at` timestamps within a 2-hour window — with dedup, the "latest session" can be an old one and the diff compares stale data against itself.
+Create `migrations/00X_mentions.sql` (next free number, idempotent):
 
-**Do:**
-1. Add a `scrape_sessions` table to the schema:
-   ```sql
-   create table if not exists scrape_sessions (
-     id          uuid primary key default gen_random_uuid(),
-     source_id   uuid not null references sources(id) on delete cascade,
-     started_at  timestamptz not null default now(),
-     finished_at timestamptz,
-     pages       integer default 0,
-     new_chunks  integer default 0,
-     errors      integer default 0
-   );
+```sql
+create table if not exists mentions (
+  id            uuid primary key default gen_random_uuid(),
+  workspace_id  uuid not null references workspaces(id) on delete cascade,
+  source_id     uuid not null references sources(id)    on delete cascade,  -- the competitor mentioned
+  platform      text not null default 'reddit' check (platform in ('reddit','hackernews')),
+  external_id   text not null,          -- reddit fullname: t3_xxx (post) / t1_xxx (comment)
+  parent_id     text,                   -- t3_xxx of the thread a comment belongs to
+  kind          text not null check (kind in ('post','comment')),
+  url           text not null,          -- permalink
+  subreddit     text,
+  author        text,
+  title         text,                   -- thread title (posts and comments both carry it, for context)
+  body          text,
+  score         integer default 0,      -- upvotes at fetch time
+  published_at  timestamptz,
+  fetched_at    timestamptz not null default now(),
+
+  -- classifier outputs (null until classified)
+  relevant      boolean,
+  confidence    float,
+  sentiment     float,                  -- -1 .. 1
+  aspect        text check (aspect in
+                  ('pricing','support','product','onboarding','reliability','docs','other')),
+  signal_type   text check (signal_type in
+                  ('complaint','praise','question','comparison','switching_intent','other')),
+  is_firsthand  boolean,
+  summary       text,
+
+  unique (platform, external_id, source_id)   -- one thread can mention two rivals → one row per rival
+);
+
+create index if not exists idx_mentions_workspace on mentions(workspace_id);
+create index if not exists idx_mentions_source_time on mentions(source_id, published_at desc);
+create index if not exists idx_mentions_signal on mentions(workspace_id, signal_type)
+  where relevant = true;
+
+alter table mentions enable row level security;
+drop policy if exists "mentions_workspace" on mentions;
+create policy "mentions_workspace" on mentions
+  for all using (is_workspace_member(workspace_id))
+  with check (is_workspace_member(workspace_id));
+```
+
+Also add monitoring config to `sources` (competitor sources only, used by the poller):
+
+```sql
+alter table sources
+  add column if not exists mention_terms       text[],   -- e.g. {"legora","leya"} — defaults to name
+  add column if not exists mention_subreddits  text[],   -- e.g. {"legaltech","LawFirm"}
+  add column if not exists mentions_enabled    boolean not null default false,
+  add column if not exists mentions_checked_at timestamptz;
+```
+
+And per-subreddit stream state (so "poll r/legaltech/new" knows its high-water mark), workspace-scoped:
+
+```sql
+create table if not exists mention_streams (
+  workspace_id  uuid not null references workspaces(id) on delete cascade,
+  platform      text not null default 'reddit',
+  stream_key    text not null,          -- e.g. 'r/legaltech/new'
+  last_seen_utc bigint default 0,       -- created_utc of newest processed post
+  primary key (workspace_id, platform, stream_key)
+);
+alter table mention_streams enable row level security;
+drop policy if exists "mention_streams_workspace" on mention_streams;
+create policy "mention_streams_workspace" on mention_streams
+  for all using (is_workspace_member(workspace_id))
+  with check (is_workspace_member(workspace_id));
+```
+
+**Verify:** migration idempotent; RLS blocks cross-workspace reads.
+
+---
+
+## Task 2 — Reddit client
+
+Create `backend/services/reddit.py`. Pure fetch layer — no classification, no DB.
+
+1. Module-level shared `httpx.AsyncClient` with the User-Agent header (contact email from a new `CONTACT_EMAIL` setting in config + `.env.example`). Simple politeness throttle: an `asyncio.Lock` + timestamp ensuring ≥1.0s between requests.
+
+2. Functions (all return parsed dicts, all raise a single `RedditError` on failure):
+
+   ```python
+   async def fetch_subreddit_new(subreddit: str, limit: int = 100) -> list[dict]
+       # GET https://www.reddit.com/r/{subreddit}/new.json?limit={limit}
+       # returns list of post dicts: id, name, title, selftext, author, score,
+       # num_comments, created_utc, permalink, subreddit
+
+   async def search_mentions(term: str, subreddit: str | None = None, limit: int = 50) -> list[dict]
+       # subreddit given:  /r/{sub}/search.json?q="{term}"&restrict_sr=1&sort=new&limit=...
+       # no subreddit:     /search.json?q="{term}"&sort=new&limit=...
+       # quote multi-word terms
+
+   async def fetch_comments(post_id: str, max_comments: int = 60) -> dict
+       # GET https://www.reddit.com/comments/{post_id}.json
+       # returns {"post": {...}, "comments": [flat list]}
    ```
-2. Add `session_id uuid references scrape_sessions(id)` and `last_seen_at timestamptz` columns to `scraped_content`.
-3. In `scrape_source` / `_scrape_feed`: create a session row at start, pass `session_id` down to `_store_content_chunks`, update session totals at the end.
-4. In `_store_content_chunks`: when a chunk's hash already exists, UPDATE that row's `last_seen_at` and `session_id` instead of skipping silently. New chunks get inserted with the session id.
-5. Rewrite `competitor_changes` to compare the two most recent `scrape_sessions` per source: recent chunks = rows with the latest `session_id`, old chunks = rows with the previous `session_id`. Remove the 2-hour-window heuristic.
 
-**Verify:** Scrape a source twice with no content change → two session rows exist, the diff endpoint reports "no changes" (not a comparison of stale data). Change something → diff detects it.
+3. **Comment-tree walker** inside `fetch_comments`: the second listing element contains nested comments; recurse through `data.children`, collecting each comment's `id, name, author, body, score, created_utc, permalink`. Skip `kind == "more"` stubs (do NOT fetch them in v1). Skip bodies that are `[deleted]` or `[removed]`. Stop at `max_comments`. Attach the thread title to every comment dict.
 
----
+4. Handle 429 (back off 30s, retry once) and 403/blocked (raise with clear message).
 
-## Task 3 — Scope content dedup per source (HIGH)
-
-**Problem:** `scraped_content.content_hash` has a global unique constraint, so identical text on two different sources (or two pages) is attributed only to whichever was scraped first.
-
-**Do:**
-1. Change the constraint to `unique (source_id, content_hash)` in the schema (drop the old constraint in the migration snippet).
-2. Update the existence check in `_store_content_chunks` to filter by both `source_id` and `content_hash`.
-
-**Verify:** Two sources containing identical boilerplate text each get their own chunk rows.
+**Verify:** unit tests with recorded/fixture JSON for the tree walker (nested replies, `more` stubs, deleted comments). Live smoke test against r/legaltech works with the proper User-Agent.
 
 ---
 
-## Task 4 — Add API authentication (CRITICAL)
+## Task 3 — Mention classifier
 
-**Problem:** All endpoints are unauthenticated. Anyone can trigger scrapes, burn OpenAI credits via `/api/insights/chat`, and delete sources.
+Create `backend/services/mention_classifier.py`.
 
-**Do:**
-1. Add `api_auth_key: str` to `Settings` in `backend/config.py`, and `API_AUTH_KEY=` to `.env.example`.
-2. Add a FastAPI dependency (e.g. `backend/auth.py`) that checks an `X-API-Key` header against the setting; return 401 on mismatch or absence.
-3. Apply it to all three routers via `dependencies=[Depends(require_api_key)]` in `backend/main.py`. Leave `/` (frontend) and `/docs` accessible.
-4. Frontend: in the single fetch helper (~line 744 of `frontend/index.html`), send the header. Simplest approach: prompt once for the key, keep it in a JS variable in memory, include it on every request.
+1. `async def classify_mention(competitor_name: str, terms: list[str], thread_title: str, body: str, is_comment: bool) -> dict`
 
-**Verify:** Requests without the header get 401; with the correct key, everything works.
+2. Use the **cheap model** (reuse `summary_model` from Settings or add `classifier_model`; never the main chat model — this is high-volume work).
 
----
+3. System prompt (base — keep it strict JSON):
 
-## Task 5 — Fix SSRF in add-url endpoint (CRITICAL)
-
-**Problem:** `POST /api/sources/{id}/add-url` in `backend/routers/sources.py` fetches any caller-supplied URL, including internal network addresses (cloud metadata endpoints, internal services).
-
-**Do:**
-1. Add a validator (e.g. in `backend/services/scraper.py`): scheme must be http/https; resolve the hostname and reject if any resolved IP is private, loopback, link-local, or reserved (use `ipaddress` module against all `socket.getaddrinfo` results).
-2. Apply it in `add_url_to_source` before fetching, and also at the start of `scrape_source` (source URLs are user input too). Return 400 with a clear message.
-
-**Verify:** `http://169.254.169.254/`, `http://localhost:8000/`, and `file://` URLs are rejected; normal public URLs still work.
-
----
-
-## Task 6 — Fix feed detection swallowing sitemaps (HIGH)
-
-**Problem:** `_is_feed_url` in `backend/services/scraper.py` treats any `.xml` path as an RSS/Atom feed, so adding `https://site.com/sitemap.xml` as a source routes to the feed parser and errors.
-
-**Do:**
-1. In `_is_feed_url`, return False if `sitemap` appears in the path.
-2. Better: after fetching, sniff the XML root element — `<rss>`/`<feed>` → feed parser; `<urlset>`/`<sitemapindex>` → treat as sitemap seed list for the crawler.
-
-**Verify:** A sitemap.xml URL added as a source crawls its pages; a real RSS feed still parses as a feed.
-
----
-
-## Task 7 — Expire stale content on rescrape (HIGH)
-
-**Problem:** Old chunks accumulate forever; removed pages remain in RAG context, so `/api/insights/chat` can answer from outdated pricing/messaging.
-
-**Do (builds on Task 2):**
-1. After a successful full-crawl session, delete `scraped_content` rows for that source whose `last_seen_at` predates the session start (i.e. pages that no longer exist or content that changed). Only do this when the session completed without a high error rate (e.g. errors < 20% of pages), to avoid wiping data on a partially failed crawl.
-2. Alternatively/additionally: in `match_content` usage (`get_relevant_context` in `backend/services/llm.py`), prefer recent chunks — add an optional recency filter parameter.
-
-**Verify:** Scrape, remove a page's content from the source site (or simulate), rescrape → the old chunk is gone and chat no longer cites it.
-
----
-
-## Task 8 — Align similarity thresholds (HIGH)
-
-**Problem:** `match_content` in SQL defaults to 0.4 but `get_relevant_context` in `backend/services/llm.py` passes 0.1 — weak matches dilute RAG answers.
-
-**Do:**
-1. Add `match_threshold: float = 0.35` to `Settings` in `backend/config.py` (env-overridable) and use it in `get_relevant_context`.
-2. Keep the SQL default in sync.
-
-**Verify:** Chat responses cite only meaningfully relevant sources; a nonsense query returns "no relevant information" rather than random chunks.
-
----
-
-## Task 9 — Prevent concurrent scrapes of the same source (HIGH)
-
-**Problem:** The hourly scheduler (`backend/scheduler.py`) and manual triggers (`backend/routers/scraper.py`) can scrape the same source simultaneously — duplicate work, confusing status.
-
-**Do:**
-1. At the start of `scrape_source` and `_scrape_feed`, check `scrape_status.get_status(source_id)`; if state is `running`, log and return `{"skipped": true, "reason": "already running"}`.
-2. In `run_scrape` router endpoint, return 409 with a friendly message if already running.
-3. Ensure status is always set to `completed`/`error` in a `finally` block so a crashed scrape doesn't lock the source forever. Add a staleness escape hatch: if a `running` status is older than e.g. 30 minutes, allow a new scrape.
-
-**Verify:** Triggering two scrapes back-to-back → second is rejected/skipped; after an exception mid-scrape, the source can be scraped again.
-
----
-
-## Task 10 — Batch chunk existence checks (MEDIUM)
-
-**Problem:** `_store_content_chunks` does one SELECT per chunk (N+1).
-
-**Do:**
-1. Compute all chunk hashes for the page first, fetch existing hashes in one query (`.in_("content_hash", hashes)` filtered by `source_id`), then insert only the missing ones. Batch-insert new records in one call where possible.
-2. Keep per-chunk embedding calls (they must be individual), but consider `asyncio.gather` with a small semaphore (e.g. 5 concurrent) for speed.
-
-**Verify:** Scraping a 20-chunk page performs 1 existence query instead of 20; stored data identical to before.
-
----
-
-## Task 11 — Compute source stats in SQL (MEDIUM)
-
-**Problem:** `list_sources` in `backend/routers/sources.py` paginates the entire `scraped_content` table in Python to count chunks and unique URLs per source.
-
-**Do:**
-1. Add a SQL function to the schema:
-   ```sql
-   create or replace function source_stats()
-   returns table (source_id uuid, pages bigint, chunks bigint)
-   language sql stable as $$
-     select source_id, count(distinct url), count(*)
-     from scraped_content group by source_id;
-   $$;
    ```
-2. Call it via `db.rpc("source_stats")` in `list_sources`; remove the pagination loop.
+   You classify a Reddit post or comment for competitive intelligence about
+   the company "{competitor_name}" (also known as: {terms}).
 
-**Verify:** Endpoint returns identical numbers, in one DB round-trip.
+   Return ONLY valid JSON:
+   {"relevant": bool, "confidence": 0..1, "sentiment": -1..1,
+    "aspect": "pricing|support|product|onboarding|reliability|docs|other",
+    "signal_type": "complaint|praise|question|comparison|switching_intent|other",
+    "is_firsthand": bool, "summary": "<max 25 words>"}
 
----
+   relevant=false if: the text is not about this company as a product/service,
+   is the company's own marketing or an employee, or the name match is
+   coincidental. When relevant=false, other fields may be null.
+   is_firsthand=true only if the author describes their own direct experience.
+   signal_type=switching_intent when the author states they are leaving,
+   have left, or are actively evaluating alternatives to this company.
+   Reddit sarcasm is common — judge tone, not surface words.
+   Use the thread title for context; a short comment like "same here"
+   inherits the meaning of the thread.
+   ```
 
-## Task 12 — Respect robots.txt when crawling (MEDIUM)
+4. Parse defensively (strip fences, validate enums, clamp numeric ranges; on parse failure return `relevant=None` and log — never raise).
 
-**Problem:** robots.txt is read for sitemap hints only; Disallow rules are ignored during the BFS crawl.
+5. `async def classify_and_store(db, workspace_id, source, item: dict, kind: str) -> bool` — dedupe first (`platform, external_id, source_id` exists → skip, zero LLM cost), classify, insert. Returns whether an LLM call was made.
 
-**Do:**
-1. In `scrape_source`, fetch and parse robots.txt once per crawl using `urllib.robotparser.RobotFileParser` (feed it the fetched text via `parse()` — don't let it fetch synchronously itself).
-2. Skip queued URLs that are disallowed for our User-Agent (also honour `*`). Log skipped counts in the summary.
-
-**Verify:** A site disallowing `/private/` never has those paths crawled; sites without robots.txt crawl normally.
-
----
-
-## Task 13 — Reuse a shared httpx client (MEDIUM)
-
-**Problem:** `fetch_page` and `_fetch_text` create a new `AsyncClient` per request — wasteful connection setup.
-
-**Do:**
-1. Create a module-level client in `backend/services/scraper.py` (lazy-init, with `_HEADERS`, `follow_redirects=True`).
-2. Close it in the FastAPI lifespan shutdown (`backend/main.py`).
-
-**Verify:** All scraping still works; no "client closed" errors on shutdown.
+**Verify:** unit tests for parsing + enum validation. Then the **validation pass** (do this personally, not the agent): run the classifier over ~100 real mentions, export to CSV, hand-check `relevant` precision and gross sentiment direction. If relevance precision < ~85%, tighten the prompt before proceeding to Task 5.
 
 ---
 
-## Task 14 — Harden the scheduler loop (MEDIUM)
+## Task 4 — Ingestion service
 
-**Problem:** In `backend/scheduler.py`, an unhandled exception in `_loop` kills the background task silently; also the inner loop reuses the `result` variable name confusingly.
+Create `backend/services/mention_monitor.py` with one entry point:
 
-**Do:**
-1. Wrap the `_check_and_scrape()` call in `_loop` with try/except (log and continue), so one bad cycle never kills the loop. Let `asyncio.CancelledError` propagate.
-2. Rename the inner `result` (scrape outcome) to `outcome` for clarity.
-3. In `stop_scheduler`, await the cancelled task where feasible for clean shutdown.
+```python
+async def check_mentions_for_workspace(db, workspace_id) -> dict   # returns counts
+```
 
-**Verify:** Force an exception inside `_check_and_scrape` → the loop logs it and runs again next hour.
+Per competitor source with `mentions_enabled`:
 
----
+1. **Targeted search:** for each term × each configured subreddit (and one global search per term), call `search_mentions`, process posts newer than `mentions_checked_at`.
+2. **Stream watch:** for each distinct subreddit across the workspace's sources, poll `fetch_subreddit_new` once (not per source), using `mention_streams.last_seen_utc` as the high-water mark; keep posts whose title/selftext contains any watched term (case-insensitive) OR with `num_comments > 3` and a term appearing in the thread later.
+3. **Comment expansion:** for each kept post, call `fetch_comments` and classify post + each comment against every competitor whose terms appear in that item's text (an item mentioning two rivals produces two rows — the unique constraint handles it).
+4. Update `mentions_checked_at` per source and `last_seen_utc` per stream **only after** successful processing.
+5. **Budget guard:** `max_mention_classifications_per_sweep` setting (default 200). Beyond it, stop and log — same pattern as the summary cap.
+6. Wrap everything per-source in try/except; one competitor's failure must not block the rest. Log one line per run: `mentions: X fetched, Y classified, Z relevant, W skipped(dedupe)`.
 
-## Task 15 — Return 404 from delete_source for unknown IDs (LOW)
+**Scheduler hook:** in `backend/scheduler.py`, after each workspace's scrape sweep, call `check_mentions_for_workspace` (service-role client, same isolation as the scraper). Respect `scrape_enabled`.
 
-**Problem:** `DELETE /api/sources/{id}` returns 204 even when nothing was deleted.
-
-**Do:** Check `result.data` after the delete; raise `HTTPException(404, "Source not found.")` if empty.
-
-**Verify:** Deleting a random UUID → 404; deleting a real source → 204.
-
----
-
-## Task 16 — Add tests for pure functions (LOW)
-
-**Problem:** Zero tests.
-
-**Do:**
-1. Add `pytest` + `pytest-asyncio` to a new `requirements-dev.txt`.
-2. Create `tests/` with unit tests for: `chunk_text` (short text, exact boundary, overlap correctness), `extract_links` (same-domain filter, fragment stripping, skip extensions, mailto/js links), `extract_content` (title fallback chain, tag stripping), `_parse_sitemap_xml` (urlset, sitemapindex, malformed XML), `_parse_feed_xml` (RSS 2.0, Atom, content:encoded preference, malformed XML), `_is_feed_url` (including the sitemap case from Task 6), and the SSRF validator from Task 5.
-3. No network or DB in unit tests — use inline fixture strings.
-
-**Verify:** `pytest` passes; aim for the parsers and validators fully covered.
+**Verify:** two sweeps back-to-back → second one classifies ~zero (dedupe + high-water marks working). A post mentioning two watched rivals produces one row per rival.
 
 ---
 
-## Task 17 — Split frontend JS into modules (LOW)
+## Task 5 — API + minimal UI
 
-**Problem:** `frontend/index.html` is 2,241 lines with all JS inline.
+1. `backend/routers/mentions.py`:
+   - `GET /api/mentions` — feed; filters: `source_id`, `signal_type`, `aspect`, `min_sentiment`/`max_sentiment`, `since`; `relevant=true` only by default; ordered `published_at desc`; paginated.
+   - `GET /api/mentions/summary` — per source: mention count, weighted sentiment, count of `switching_intent`, top negative aspect. Weight sentiment by `ln(1 + greatest(score,0))`; **suppress** any aggregate built on fewer than 5 relevant mentions (return `n` and `insufficient: true` instead of a number).
+   - `PATCH /api/sources/{id}/mentions-config` — set `mention_terms`, `mention_subreddits`, `mentions_enabled`.
+   - Auth + workspace scoping identical to other routers.
 
-**Do:**
-1. Extract JS into `frontend/js/` modules (e.g. `api.js` for the fetch helper, one file per tab/feature) using native ES modules (`<script type="module">`). Extract CSS to `frontend/css/styles.css`.
-2. Update `backend/main.py` to serve the frontend directory statically (`StaticFiles`) so the extra files resolve.
-3. No behaviour changes — pure refactor.
+2. Frontend, minimal v1:
+   - On the source edit form: mentions enable toggle, terms input (chips), subreddits input.
+   - A **Mentions** view: the feed with sentiment/signal chips (reuse existing chip styles), each row linking to the Reddit permalink, filter by competitor and signal type. A "Switching intent" quick-filter button.
+   - Show "Not enough signal yet" wherever `insufficient: true` — never render a number built on <5 mentions.
 
-**Verify:** Every tab and action works identically; no console errors.
+**Verify:** enable mentions for one competitor with terms + r/legaltech; run a sweep; the feed shows classified mentions with working permalinks; summary suppresses low-n aggregates.
 
 ---
 
-## Suggested commit sequence
+## Task 6 — Guard rails & honesty
 
-Tasks 1–3 belong together (one schema migration). Then 4–5 (security), 6–9 (correctness), 10–14 (perf/robustness), 15–17 (hygiene). Run the app and click through the UI after each group.
+1. **No fake neutrality:** UIs must distinguish "no data" from "sentiment 0.0" everywhere.
+2. **Spike flag (cheap version):** in `/api/mentions/summary`, include `spike: true` when the last 24h relevant-mention count exceeds 5× the trailing 7-day daily average (min 5 mentions). Display as a badge, not an alert system — full anomaly detection is out of scope.
+3. **Tests:** `tests/test_mentions.py` — dedupe on unique constraint, weighted-sentiment math, low-n suppression, tenancy isolation (workspace A cannot read B's mentions).
+4. **Do not** add Slack/email delivery of mentions in this file — that belongs to the digest work.
+5. Homepage: do NOT re-add sentiment claims yet. Only after this ships and the validation pass in Task 3 is done.
+
+---
+
+## Commit sequence
+
+| Commit | Tasks |
+|---|---|
+| 1 | 1 (schema) |
+| 2 | 2 (reddit client) |
+| 3 | 3 (classifier) — then STOP for the manual 100-mention validation pass |
+| 4 | 4 (ingestion + scheduler) |
+| 5 | 5–6 (API, UI, guard rails) |
+
+The stop after commit 3 is deliberate: do not wire the classifier into automated sweeps until a human has checked ~100 classifications. A wrong sentiment number shown confidently is worse than no sentiment feature.
