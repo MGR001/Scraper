@@ -14,6 +14,7 @@ class Settings(BaseSettings):
                                           # reasoning-token cost is the trap already hit
                                           # with gpt-5.6-terra budgets elsewhere
     max_summaries_per_sweep: int = 400
+    contact_email: str = "contact@example.com"  # Reddit User-Agent contact — required by their API rules
 
     model_config = {"env_file": ".env"}
 
