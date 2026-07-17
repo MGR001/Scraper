@@ -948,7 +948,10 @@
         : sentiment > 0.15 ? 'text-emerald-600' : sentiment < -0.15 ? 'text-red-600' : 'text-slate-600';
       return `<div class="bg-card border border-border rounded-xl p-4">
         <div class="flex items-center justify-between mb-1">
-          <p class="font-semibold text-slate-900 text-sm">${esc(r.source_name)}</p>
+          <p class="font-semibold text-slate-900 text-sm flex items-center gap-1.5">
+            ${esc(r.source_name)}
+            ${r.spike ? '<span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-orange-500/15 text-orange-600 border border-orange-500/30" title="Relevant mentions in the last 24h are more than 5x the trailing 7-day daily average">🔺 Spike</span>' : ''}
+          </p>
           <span class="text-xs text-slate-500">${r.n} mention${r.n !== 1 ? 's' : ''}</span>
         </div>
         <div class="flex items-center gap-3 mt-1.5 flex-wrap">
