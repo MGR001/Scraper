@@ -315,11 +315,18 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
         prev_list = prev_res.data or []
         prev_session = prev_list[0] if prev_list else None
 
-        # Fetch up to 12 content chunks from the latest session
+        # Fetch up to 12 content chunks from the latest session, newest-first
+        # by scraped_at (= first-seen time — unchanged when a chunk is just
+        # reconfirmed by a later crawl). A source can have hundreds of stable
+        # chunks that all get touched into the same session_id; without this
+        # ordering, an unordered LIMIT 12 almost never lands on the handful
+        # of genuinely new chunks, so brand-new pages silently never reach
+        # the diff the LLM sees.
         recent_res = await asyncio.to_thread(
             lambda sess_id=latest_session["id"]: db.table("scraped_content")
             .select("content")
             .eq("session_id", sess_id)
+            .order("scraped_at", desc=True)
             .limit(12)
             .execute()
         )
@@ -331,6 +338,7 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
                 lambda sess_id=prev_session["id"]: db.table("scraped_content")
                 .select("content")
                 .eq("session_id", sess_id)
+                .order("scraped_at", desc=True)
                 .limit(12)
                 .execute()
             )
