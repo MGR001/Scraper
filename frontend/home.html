@@ -425,10 +425,10 @@ h1,h2,h3{ letter-spacing:-.025em; line-height:1.1 }
     </p>
   </div>
 
-  <div class="tape rise d3" aria-label="Head-to-head summary, last 30 days">
+  <div class="tape rise d3" aria-label="Head-to-head summary, last 5 days">
     <div class="tape-bar">
       <span class="live"><span class="dot"></span>Live</span>
-      <span>Last 30 days</span>
+      <span>Last 5 days</span>
     </div>
     <div class="tape-head">
       <div class="corner corner-you">
@@ -443,33 +443,28 @@ h1,h2,h3{ letter-spacing:-.025em; line-height:1.1 }
     </div>
     <ul class="tape-rows">
       <li class="tape-row">
-        <span class="val val-you">214</span>
-        <span class="metric">Pages indexed</span>
-        <span class="val val-them flag" data-count="847">847</span>
-      </li>
-      <li class="tape-row">
         <span class="val val-you">1</span>
         <span class="metric">Changes detected</span>
-        <span class="val val-them" data-count="9">9</span>
+        <span class="val val-them flag" data-count="9">9</span>
       </li>
       <li class="tape-row">
-        <span class="val val-you">312</span>
-        <span class="metric">Content chunks</span>
-        <span class="val val-them" data-count="1204">1204</span>
+        <span class="val val-you">0</span>
+        <span class="metric">Pricing moves</span>
+        <span class="val val-them" data-count="1">1</span>
       </li>
       <li class="tape-row">
-        <span class="val val-you" id="sent-you">4</span>
-        <span class="metric">Sources active</span>
-        <span class="val val-them" id="sent-them">6</span>
+        <span class="val val-you">0</span>
+        <span class="metric">Messaging shifts</span>
+        <span class="val val-them" data-count="2">2</span>
       </li>
       <li class="tape-row">
-        <span class="val val-you">8</span>
-        <span class="metric">AI queries run</span>
-        <span class="val val-them" data-count="0">—</span>
+        <span class="val val-you">6</span>
+        <span class="metric">Pages shipped</span>
+        <span class="val val-them" data-count="23">23</span>
       </li>
     </ul>
     <div class="tape-foot">
-      <span class="read"><b>Read:</b> Halcyon has 4× more indexed content. 9 pages changed since last scrape.</span>
+      <span class="read"><b>Read:</b> Halcyon shipped 23 pages and moved on pricing this week. You haven't looked yet.</span>
       <a href="/login" class="mini-btn">Open app →</a>
     </div>
   </div>
@@ -535,10 +530,10 @@ h1,h2,h3{ letter-spacing:-.025em; line-height:1.1 }
     <div class="mail reveal">
       <div class="mail-bar">
         <span class="mail-from">RIvals <span>· Competitor changes</span></span>
-        <span class="mail-time">Today 08:31</span>
+        <span class="mail-time">Generated on open</span>
       </div>
-      <div class="mail-subject">3 pages changed overnight. One needs your attention.</div>
-      <p class="mail-sub">Halcyon · scrape completed 06:14 · compared to session 2 days ago</p>
+      <div class="mail-subject">3 pages changed this week. One needs your attention.</div>
+      <p class="mail-sub">Halcyon · scrape completed 06:14 · compared to session 5 days ago</p>
       <ul class="mail-items">
         <li>
           <div class="mi-top"><span class="chip chip-neg">Changed</span><span class="mi-who">halcyon.com/pricing</span></div>
@@ -565,16 +560,28 @@ h1,h2,h3{ letter-spacing:-.025em; line-height:1.1 }
       <p class="eyebrow">What's inside</p>
       <h2 class="h2">Everything you need. Nothing you have to maintain.</h2>
       <div class="note on">
-        <h3>Automated crawling</h3>
-        <p>Add a URL and RIvals finds the sitemap, crawls every linked page and re-indexes on your schedule — from every hour to once a week.</p>
+        <h3>Monitoring</h3>
+        <p>Sitemap-aware full-site crawling with a JS-rendering fallback for sites that need it, RSS/Atom feeds, per-source crawl scoping, and robots.txt respected on every fetch.</p>
       </div>
       <div class="note on">
-        <h3>AI chat grounded in their content</h3>
-        <p>Ask any question in plain language. Answers are sourced from your competitors' actual published pages, not training data. No hallucinations about pricing that changed last month.</p>
+        <h3>Change intelligence</h3>
+        <p>Every sweep is diffed against the previous session and rolled into a Competitor Change Report — including what a change means for your own company, not just theirs.</p>
       </div>
       <div class="note on">
-        <h3>GTM tools on demand</h3>
-        <p>Generate a segment heatmap, positioning teardown or campaign messaging angles whenever you need them — always from the freshest crawl data.</p>
+        <h3>Eight strategy frameworks</h3>
+        <p>Battlecards, Positioning Canvas, Positioning Teardown, Feature Comparison, Kano Analysis, Messaging House, GTM Heatmap and Campaign Messaging — generated on demand from live crawl data.</p>
+      </div>
+      <div class="note on">
+        <h3>Ask anything</h3>
+        <p>RAG chat grounded in every page you've indexed, with cited sources — not model training data.</p>
+      </div>
+      <div class="note on">
+        <h3>Built for teams</h3>
+        <p>Workspaces with invites and roles, plus a News feed with an on-demand digest across every source you track.</p>
+      </div>
+      <div class="note on">
+        <h3>Evidence, not assertions</h3>
+        <p>Every framework claim links back to the exact page it came from. Nothing is asserted without a receipt.</p>
       </div>
     </div>
   </div>
@@ -602,7 +609,7 @@ h1,h2,h3{ letter-spacing:-.025em; line-height:1.1 }
       </div>
       <div class="role-a">
         <div class="role-lab">Gets back</div>
-        <p>Every page their competitor published, indexed and searchable. Ask "what's Halcyon's enterprise pitch?" and get an answer sourced from their actual pages — not a stale slide deck.</p>
+        <p>A Positioning Teardown built from every page they've published: their claim, their proof, and where it's thin — sourced from actual pages, not a stale slide deck.</p>
       </div>
     </li>
     <li class="role-row">
@@ -616,7 +623,7 @@ h1,h2,h3{ letter-spacing:-.025em; line-height:1.1 }
       </div>
       <div class="role-a">
         <div class="role-lab">Gets back</div>
-        <p>Every competitor's pricing page, indexed and tracked over time. Change detection surfaces moves the day they happen. A decision with evidence under it, not a hunch.</p>
+        <p>A Competitor Change Report the moment their pricing page moves, with the evidence link attached. A decision with proof under it, not a hunch.</p>
       </div>
     </li>
     <li class="role-row">
@@ -630,7 +637,7 @@ h1,h2,h3{ letter-spacing:-.025em; line-height:1.1 }
       </div>
       <div class="role-a">
         <div class="role-lab">Gets back</div>
-        <p>A competitor profile regenerated from last night's crawl: their positioning, their weak spots, and the messaging angles that exploit the gaps — ready to paste into the CRM.</p>
+        <p>A battlecard regenerated from the latest crawl: their claim, their weak spots, and the evidence link for each — ready to paste into the CRM.</p>
       </div>
     </li>
   </ul>
@@ -640,37 +647,37 @@ h1,h2,h3{ letter-spacing:-.025em; line-height:1.1 }
 <section class="signal">
   <div class="signal-in">
     <div class="reveal">
-      <p class="eyebrow">Market sentiment</p>
-      <h2>From raw content to ready-to-use strategy</h2>
+      <p class="eyebrow">The closing deliverable</p>
+      <h2>From raw pages to a battlecard your reps will actually use</h2>
       <p class="lede">
-        RIvals doesn't just collect data. It turns indexed competitor content into positioning
-        teardowns, segment heatmaps and campaign messaging angles — generated on demand,
-        sourced from what your rivals actually published.
+        Every framework — Positioning Canvas, Feature Comparison, GTM Heatmap and five more —
+        rolls up into the one artifact sales actually opens: a battlecard built from what your
+        rival published, framed as you versus them, with a source link on every claim.
       </p>
       <div class="kv">
-        <div><div class="n">Profiles</div><div class="l">AI summary per competitor</div></div>
+        <div><div class="n">Battlecards</div><div class="l">You vs. each rival, evidence attached</div></div>
         <div><div class="n">Heatmap</div><div class="l">ICP × competitor matrix</div></div>
         <div><div class="n">Messaging</div><div class="l">Ready-to-use copy angles</div></div>
       </div>
     </div>
     <div class="panel reveal">
-      <div class="panel-bar"><span>Competitor changes · last scrape</span><span>3 changed</span></div>
+      <div class="panel-bar"><span>Battlecard · Northgate vs Halcyon</span><span>Generated on demand</span></div>
       <ul class="feed">
         <li>
-          <div><div class="src">halcyon.com/pricing</div><div class="quote">Pricing page updated — Starter tier removed, free trial gated</div></div>
-          <span class="chip chip-neg">Changed</span>
+          <div><div class="src">Their weakness</div><div class="quote">No native Word or Outlook add-in — reps ask for it on every call</div></div>
+          <span class="chip chip-neg">Halcyon</span>
         </li>
         <li>
-          <div><div class="src">halcyon.com/enterprise</div><div class="quote">New enterprise page targeting teams over 100 seats</div></div>
-          <span class="chip chip-pos">New</span>
+          <div><div class="src">Why you win</div><div class="quote">Native Word/Outlook add-ins ship in the core plan, not an upsell</div></div>
+          <span class="chip chip-pos">Northgate</span>
         </li>
         <li>
-          <div><div class="src">halcyon.com — homepage</div><div class="quote">Hero copy shifted from "workflow" to "agentic workflows"</div></div>
-          <span class="chip chip-neu">Changed</span>
+          <div><div class="src">Landmine to plant</div><div class="quote">"How do you handle redlines when the client's still on Word?"</div></div>
+          <span class="chip chip-neu">Ask</span>
         </li>
         <li>
-          <div><div class="src">vantage.io/blog</div><div class="quote">4 new blog posts indexed since last session</div></div>
-          <span class="chip chip-pos">New</span>
+          <div><div class="src">Evidence</div><div class="quote">halcyon.com/product/integrations — sourced, not guessed</div></div>
+          <span class="chip chip-pos">Linked</span>
         </li>
       </ul>
     </div>
@@ -690,15 +697,15 @@ h1,h2,h3{ letter-spacing:-.025em; line-height:1.1 }
     </div>
     <div class="q">
       <h3>How does the AI analysis work?</h3>
-      <p>Content is chunked and embedded with OpenAI (text-embedding-3-small). The chat uses GPT-5.6 with RAG — answers are grounded in your competitors' actual published pages, not model training data.</p>
+      <p>Every answer and every framework claim is grounded in your competitors' actual indexed pages, with a source link attached — not model training data, and not a guess.</p>
     </div>
     <div class="q">
       <h3>How does change detection work?</h3>
       <p>Every rescrape is compared to the previous session using content hashes. New pages, removed pages and altered content are surfaced in the Insights tab — nothing falls through the cracks.</p>
     </div>
     <div class="q">
-      <h3>What are the GTM tools?</h3>
-      <p>A segment heatmap plots competitors against your ICPs. Positioning teardown reconstructs each rival's core claims. Campaign messaging generates ready-to-use copy angles — all generated on demand from your indexed data.</p>
+      <h3>What are the strategy frameworks?</h3>
+      <p>Eight of them — Battlecards, Positioning Canvas, Positioning Teardown, Feature Comparison, Kano Analysis, Messaging House, GTM Heatmap and Campaign Messaging. All generated on demand from your indexed data, all with source links attached.</p>
     </div>
   </div>
 </section>
