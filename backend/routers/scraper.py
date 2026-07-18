@@ -290,11 +290,77 @@ async def get_stats(ws: WorkspaceContext = Depends(get_workspace)):
     }
 
 
+async def _paginated_rows(db, query_fn, page_size: int = 1000) -> list[dict]:
+    """Loops a .range()-paged select until a partial page comes back. Never
+    trust a single unbounded/loosely-bounded select on scraped_content --
+    Supabase silently caps it at (by default) 1000 rows rather than
+    erroring, which quietly truncated an earlier version of this feature.
+    query_fn(offset) must return the query with .range() already applied."""
+    rows: list[dict] = []
+    offset = 0
+    while True:
+        res = await asyncio.to_thread(lambda o=offset: query_fn(o).execute())
+        batch = res.data or []
+        rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+    return rows
+
+
+async def _daily_new_changed(db, source_id: str, day_list: list[str]) -> tuple[dict[str, int], dict[str, int]]:
+    """Per-day counts of distinct URLs that were genuinely new (first ever
+    seen that day) vs changed (already existed, picked up a fresh chunk
+    that day) within day_list's window. Same new-vs-changed logic as
+    _source_new_or_changed in sources.py, extended across every day in the
+    window instead of just the latest crawl."""
+    window_start = f"{day_list[0]}T00:00:00+00:00"
+
+    in_window = await _paginated_rows(
+        db, lambda o: db.table("scraped_content").select("url, scraped_at")
+        .eq("source_id", source_id).gte("scraped_at", window_start)
+        .range(o, o + 999)
+    )
+    if not in_window:
+        return {}, {}
+
+    by_url: dict[str, list[str]] = {}
+    for row in in_window:
+        by_url.setdefault(row["url"], []).append(row["scraped_at"])
+
+    # Fetch prior evidence unfiltered-by-url and match in Python rather than
+    # .in_("url", urls) -- a source with hundreds of fresh URLs can build an
+    # IN-list long enough to blow past PostgREST's request size limit (seen
+    # in testing: a plain 400 "Bad Request" with no useful detail).
+    # Pagination already makes an unbounded fetch safe, so prefer it here.
+    prior = await _paginated_rows(
+        db, lambda o: db.table("scraped_content").select("url")
+        .eq("source_id", source_id).lt("scraped_at", window_start)
+        .range(o, o + 999)
+    )
+    had_prior_before_window = {r["url"] for r in prior}
+
+    daily_new: dict[str, int] = {}
+    daily_changed: dict[str, int] = {}
+    for url, timestamps in by_url.items():
+        dates = sorted({ts[:10] for ts in timestamps})
+        if url in had_prior_before_window:
+            for d in dates:
+                daily_changed[d] = daily_changed.get(d, 0) + 1
+        else:
+            daily_new[dates[0]] = daily_new.get(dates[0], 0) + 1
+            for d in dates[1:]:
+                daily_changed[d] = daily_changed.get(d, 0) + 1
+
+    return daily_new, daily_changed
+
+
 @router.get("/daily-activity")
 async def daily_activity(days: int = 21, ws: WorkspaceContext = Depends(get_workspace)):
-    """Per-source daily pages-scraped timeline (for the Dashboard's Activity
-    tab) plus each source's current new/changed page counts (same numbers
-    as the Sources tab, reused rather than recomputed)."""
+    """Per-source daily timeline for the Dashboard's Activity tab: total
+    pages scraped per day, plus that day's new/changed/unchanged split (for
+    a stacked bar), plus each source's current new/changed page counts
+    (same numbers as the Sources tab)."""
     from datetime import datetime, timedelta, timezone
 
     from .sources import _new_or_changed_counts
@@ -332,17 +398,34 @@ async def daily_activity(days: int = 21, ws: WorkspaceContext = Depends(get_work
         if idx is not None:
             daily_map[sid][idx] += row.get("pages") or 0
 
-    new_changed_map = await _new_or_changed_counts(db, source_ids)
+    # These two are independent per source (and internally independent
+    # across sources too) -- run them concurrently rather than blocking one
+    # on the other, and gather every source's daily classification at once
+    # instead of awaiting them one at a time. Cuts wall-clock time roughly
+    # in proportion to source count, since this is I/O-bound.
+    new_changed_map, per_source_daily = await asyncio.gather(
+        _new_or_changed_counts(db, source_ids),
+        asyncio.gather(*(_daily_new_changed(db, s["id"], day_list) for s in sources)),
+    )
 
     result_sources = []
-    for s in sources:
+    for s, (daily_new_map, daily_changed_map) in zip(sources, per_source_daily):
         sid = s["id"]
         counts = new_changed_map.get(sid, {"new": 0, "changed": 0})
+        daily_new = [daily_new_map.get(d, 0) for d in day_list]
+        daily_changed = [daily_changed_map.get(d, 0) for d in day_list]
+        daily_unchanged = [
+            max(0, daily_map[sid][i] - daily_new[i] - daily_changed[i])
+            for i in range(days)
+        ]
         result_sources.append({
             "source_id": sid,
             "name": s["name"],
             "category": s["category"],
             "daily_pages": daily_map[sid],
+            "daily_new": daily_new,
+            "daily_changed": daily_changed,
+            "daily_unchanged": daily_unchanged,
             "new_pages": counts["new"],
             "changed_pages": counts["changed"],
         })

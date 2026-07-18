@@ -11,30 +11,46 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+async def _paginated_rows(db, query_fn, page_size: int = 1000) -> list[dict]:
+    """Loops a .range()-paged select until a partial page comes back. Never
+    trust a single unbounded/loosely-bounded select on scraped_content --
+    Supabase silently caps it at (by default) 1000 rows rather than
+    erroring. query_fn(offset) must return the query with .range() applied."""
+    rows: list[dict] = []
+    offset = 0
+    while True:
+        res = await asyncio.to_thread(lambda o=offset: query_fn(o).execute())
+        batch = res.data or []
+        rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+    return rows
+
+
 async def _source_new_or_changed(db, source_id: str, cutoff: str) -> dict[str, int]:
     """new/changed counts for one source, given its latest session's start
-    time. Both queries are naturally bounded: the first to just this one
-    crawl's freshly-inserted rows, the second to just those specific URLs
-    (never the whole table) -- the same shape already proven correct in
-    competitor_changes()."""
-    fresh_res = await asyncio.to_thread(
-        lambda: db.table("scraped_content").select("url")
-        .eq("source_id", source_id)
-        .gte("scraped_at", cutoff)
-        .execute()
+    time. Both queries are scoped to one source and paginated -- a single
+    crawl touching more than 1000 fresh pages, or a source with more than
+    ~1000 fresh URLs' worth of query-string length, would otherwise either
+    silently truncate (unbounded select) or 400 (an .in_() list that's too
+    long for PostgREST's request size limit -- hit in testing on the
+    sibling per-day version of this classification)."""
+    fresh_rows = await _paginated_rows(
+        db, lambda o: db.table("scraped_content").select("url")
+        .eq("source_id", source_id).gte("scraped_at", cutoff)
+        .range(o, o + 999)
     )
-    fresh_urls = list({r["url"] for r in (fresh_res.data or [])})
+    fresh_urls = list({r["url"] for r in fresh_rows})
     if not fresh_urls:
         return {"new": 0, "changed": 0}
 
-    prior_res = await asyncio.to_thread(
-        lambda: db.table("scraped_content").select("url")
-        .eq("source_id", source_id)
-        .lt("scraped_at", cutoff)
-        .in_("url", fresh_urls)
-        .execute()
+    prior_rows = await _paginated_rows(
+        db, lambda o: db.table("scraped_content").select("url")
+        .eq("source_id", source_id).lt("scraped_at", cutoff)
+        .range(o, o + 999)
     )
-    had_prior = {r["url"] for r in (prior_res.data or [])}
+    had_prior = {r["url"] for r in prior_rows}
     changed_n = sum(1 for u in fresh_urls if u in had_prior)
     return {"new": len(fresh_urls) - changed_n, "changed": changed_n}
 
@@ -73,10 +89,9 @@ async def _new_or_changed_counts(db, source_ids: list[str]) -> dict[str, dict[st
             if sid not in latest_start:  # first hit per source_id = latest, rows are desc-ordered
                 latest_start[sid] = row["started_at"]
 
-        counts: dict[str, dict[str, int]] = {}
-        for sid, cutoff in latest_start.items():
-            counts[sid] = await _source_new_or_changed(db, sid, cutoff)
-        return counts
+        sids = list(latest_start.keys())
+        results = await asyncio.gather(*(_source_new_or_changed(db, sid, latest_start[sid]) for sid in sids))
+        return dict(zip(sids, results))
     except Exception:
         return {}
 

@@ -235,6 +235,12 @@
     }
   }
 
+  const _ACTIVITY_SERIES = [
+    { key: 'daily_unchanged', label: 'Unchanged', color: '#cbd5e1' },
+    { key: 'daily_changed',   label: 'Changed',   color: '#d97706' },
+    { key: 'daily_new',       label: 'New',       color: '#059669' },
+  ]; // stacking order: bottom to top -- new/changed (the interesting part) always visible on top
+
   function renderActivityGrid(data) {
     const grid = document.getElementById('dash-activity-grid');
     const days = data.days || [];
@@ -243,7 +249,14 @@
       grid.innerHTML = '<p class="text-slate-500 text-sm">No sources yet.</p>';
       return;
     }
-    grid.innerHTML = sources.map(s => `
+    const legend = `<div class="flex items-center gap-4 mb-3 lg:col-span-2">${
+      _ACTIVITY_SERIES.map(s => `
+        <span class="inline-flex items-center gap-1.5 text-xs text-slate-500">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color}"></span>
+          ${s.label}
+        </span>`).join('')
+    }</div>`;
+    grid.innerHTML = legend + sources.map(s => `
       <div class="bg-card border border-border rounded-xl p-4">
         <div class="flex items-center justify-between gap-2 mb-0.5">
           <span class="font-semibold text-slate-900 text-sm truncate">${esc(s.name)}</span>
@@ -258,7 +271,7 @@
 
     sources.forEach(s => {
       const el = document.getElementById(`activity-chart-${s.source_id}`);
-      if (el) renderDailyBarChart(el, days, s.daily_pages, '#2563eb');
+      if (el) renderDailyStackedChart(el, days, s);
     });
   }
 
@@ -269,13 +282,16 @@
          + `L${x + w - r},${y} Q${x + w},${y} ${x + w},${y + r} L${x + w},${y + h} Z`;
   }
 
-  function renderDailyBarChart(container, days, values, color) {
+  function renderDailyStackedChart(container, days, source) {
     const width  = container.clientWidth || 320;
     const height = 60;
+    const gap    = 2; // surface gap between stacked segments
     const n      = days.length || 1;
     const colW   = width / n;
     const barW   = Math.max(1, Math.min(24, colW - 2));
-    const maxVal = Math.max(...values, 1);
+
+    const totals = days.map((_, i) => _ACTIVITY_SERIES.reduce((sum, s) => sum + (source[s.key][i] || 0), 0));
+    const maxVal = Math.max(...totals, 1);
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', '100%');
@@ -285,10 +301,13 @@
     svg.style.display = 'block';
     svg.style.overflow = 'visible';
 
-    values.forEach((v, i) => {
-      const x = i * colW;
-      const barH = maxVal > 0 ? Math.max(v > 0 ? 2 : 0, Math.round((v / maxVal) * (height - 4))) : 0;
+    days.forEach((_, i) => {
+      const x  = i * colW;
       const bx = x + (colW - barW) / 2;
+
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.classList.add('daily-bar-group');
+      svg.appendChild(g);
 
       const hit = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       hit.setAttribute('x', String(x));
@@ -298,31 +317,68 @@
       hit.setAttribute('fill', 'transparent');
       hit.classList.add('daily-bar-hit');
       hit.style.cursor = 'default';
-      hit.addEventListener('pointerenter', (evt) => showChartTooltip(evt, days[i], v));
+      hit.addEventListener('pointerenter', (evt) => showChartTooltip(evt, days[i], _ACTIVITY_SERIES.map(s => ({
+        label: s.label, color: s.color, value: source[s.key][i] || 0,
+      }))));
       hit.addEventListener('pointermove', moveChartTooltip);
       hit.addEventListener('pointerleave', hideChartTooltip);
-      svg.appendChild(hit);
+      g.appendChild(hit);
 
-      if (barH > 0) {
-        const bar = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        bar.setAttribute('d', _roundedTopBarPath(bx, height - barH, barW, barH, 3));
-        bar.setAttribute('fill', color);
+      // Non-zero segments only, so the gap logic and "last = rounded top"
+      // both operate on what's actually visible.
+      const segments = _ACTIVITY_SERIES
+        .map(s => ({ color: s.color, value: source[s.key][i] || 0 }))
+        .filter(s => s.value > 0);
+
+      let yCursor = height;
+      segments.forEach((seg, segIdx) => {
+        const segH = Math.max(2, Math.round((seg.value / maxVal) * (height - 4)));
+        const isTop = segIdx === segments.length - 1;
+        const top = yCursor - segH;
+        const bar = document.createElementNS(
+          'http://www.w3.org/2000/svg', isTop ? 'path' : 'rect'
+        );
+        if (isTop) {
+          bar.setAttribute('d', _roundedTopBarPath(bx, top, barW, segH, 3));
+        } else {
+          bar.setAttribute('x', String(bx));
+          bar.setAttribute('y', String(top));
+          bar.setAttribute('width', String(barW));
+          bar.setAttribute('height', String(segH));
+        }
+        bar.setAttribute('fill', seg.color);
         bar.classList.add('daily-bar');
         bar.style.pointerEvents = 'none';
-        svg.appendChild(bar);
-      }
+        g.appendChild(bar);
+        yCursor = top - gap;
+      });
     });
 
     container.innerHTML = '';
     container.appendChild(svg);
   }
 
-  function showChartTooltip(evt, dateStr, value) {
+  function showChartTooltip(evt, dateStr, rows) {
     const tt = document.getElementById('chart-tooltip');
     const d = new Date(dateStr + 'T00:00:00');
     const label = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-    tt.querySelector('.tt-value').textContent = `${value} page${value !== 1 ? 's' : ''}`;
-    tt.querySelector('.tt-date').textContent = `${label}:`;
+    tt.querySelector('.tt-date').textContent = `${label}`;
+
+    const valueEl = tt.querySelector('.tt-value');
+    valueEl.innerHTML = '';
+    const total = rows.reduce((sum, r) => sum + r.value, 0);
+    if (total === 0) {
+      valueEl.textContent = ' no activity';
+    } else {
+      rows.filter(r => r.value > 0).forEach(r => {
+        const row = document.createElement('div');
+        const swatch = document.createElement('span');
+        swatch.style.cssText = `display:inline-block;width:6px;height:6px;border-radius:1px;background:${r.color};margin-right:4px;`;
+        row.appendChild(swatch);
+        row.appendChild(document.createTextNode(`${r.value} ${r.label.toLowerCase()}`));
+        valueEl.appendChild(row);
+      });
+    }
     tt.style.display = 'block';
     moveChartTooltip(evt);
   }

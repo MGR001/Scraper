@@ -105,13 +105,13 @@
     .src-tab-btn.active { color: #1e293b; border-bottom-color: #3b82f6; }
     #chart-tooltip {
       position: fixed; z-index: 60; pointer-events: none;
-      background: #0f172a; color: #f8fafc; font-size: 11px; line-height: 1.4;
-      padding: 5px 8px; border-radius: 6px; white-space: nowrap;
+      background: #0f172a; color: #f8fafc; font-size: 11px; line-height: 1.5;
+      padding: 6px 9px; border-radius: 6px; white-space: nowrap;
       transform: translate(-50%, calc(-100% - 8px)); display: none;
     }
-    #chart-tooltip .tt-date { color: #94a3b8; }
+    #chart-tooltip .tt-date { color: #94a3b8; display: block; margin-bottom: 2px; }
     #chart-tooltip .tt-value { font-weight: 700; }
-    .daily-bar-hit:hover + .daily-bar { filter: brightness(1.15); }
+    .daily-bar-group:hover .daily-bar { filter: brightness(1.15); }
     .gtm-lens-btn { background: transparent; color: #64748b; cursor: pointer; }
     .gtm-lens-btn:hover { background: #f1f5f9; color: #1e293b; }
     .gtm-lens-btn.active { background: #3b82f6; color: #fff; }
