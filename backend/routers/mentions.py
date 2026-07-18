@@ -158,7 +158,7 @@ async def mentions_summary(ws: WorkspaceContext = Depends(get_workspace)):
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources").select("id, name")
         .eq("workspace_id", ws.workspace_id)
-        .eq("category", "competitor")
+        .in_("category", ["competitor", "market"])
         .execute()
     )
     sources = sources_res.data or []

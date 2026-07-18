@@ -895,7 +895,7 @@
   async function loadMentionsSourcePills() {
     try {
       const all = await api('/api/sources/');
-      _mentionsSources = all.filter(s => s.category === 'competitor' && s.mentions_enabled);
+      _mentionsSources = all.filter(s => (s.category === 'competitor' || s.category === 'market') && s.mentions_enabled);
     } catch (e) {
       _mentionsSources = [];
     }
@@ -932,7 +932,7 @@
   function renderMentionsSummary(results) {
     const el = document.getElementById('mentions-summary');
     if (!results.length) {
-      el.innerHTML = `<p class="text-slate-500 text-sm sm:col-span-2">No competitor sources yet. Add one, then enable "Track Reddit mentions" from its Edit Source form.</p>`;
+      el.innerHTML = `<p class="text-slate-500 text-sm sm:col-span-2">No competitor or market sources yet. Add one, then enable "Track Reddit mentions" from its Edit Source form.</p>`;
       return;
     }
     el.innerHTML = results.map(r => {
@@ -1335,7 +1335,8 @@
 
   function toggleMentionsSection() {
     const category = document.getElementById('edit-src-category').value;
-    document.getElementById('edit-src-mentions-section').classList.toggle('hidden', category !== 'competitor');
+    const show = category === 'competitor' || category === 'market';
+    document.getElementById('edit-src-mentions-section').classList.toggle('hidden', !show);
   }
 
   function openEditSourceModal(sourceId) {
@@ -1384,7 +1385,7 @@
         method: 'PUT',
         body: JSON.stringify({ name, url, category, scrape_interval: interval || 24, crawl_scope: scope, sitemap_url: sitemap }),
       });
-      if (category === 'competitor') {
+      if (category === 'competitor' || category === 'market') {
         const mentionsEnabled = document.getElementById('edit-src-mentions-enabled').checked;
         const terms = document.getElementById('edit-src-mention-terms').value
           .split(',').map(t => t.trim()).filter(Boolean);

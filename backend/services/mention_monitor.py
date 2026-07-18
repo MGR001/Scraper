@@ -117,13 +117,13 @@ async def _expand_post(
 
 
 async def check_mentions_for_workspace(db, workspace_id: str) -> dict:
-    """Polls Reddit for every competitor source with mentions_enabled in this
-    workspace, classifies matches, and stores them. Returns sweep counts:
-    {fetched, classified, relevant, skipped_dedupe}."""
+    """Polls Reddit for every competitor/market source with mentions_enabled
+    in this workspace, classifies matches, and stores them. Returns sweep
+    counts: {fetched, classified, relevant, skipped_dedupe}."""
     sources_res = await asyncio.to_thread(
         lambda: db.table("sources").select("*")
         .eq("workspace_id", workspace_id)
-        .eq("category", "competitor")
+        .in_("category", ["competitor", "market"])
         .eq("mentions_enabled", True)
         .eq("is_active", True)
         .execute()

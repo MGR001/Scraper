@@ -31,6 +31,10 @@ class _FakeTable:
         self._filters[key] = value
         return self
 
+    def in_(self, key, values):
+        self._filters[f"in:{key}"] = list(values)
+        return self
+
     def gte(self, key, value):
         self._filters[f"gte:{key}"] = value
         return self
@@ -66,6 +70,9 @@ class _FakeDB:
             for k, v in filters.items():
                 if k.startswith("gte:"):
                     if (r.get(k[4:]) or "") < v:
+                        return False
+                elif k.startswith("in:"):
+                    if r.get(k[3:]) not in v:
                         return False
                 elif r.get(k) != v:
                     return False
