@@ -85,7 +85,7 @@
   function signOut() {
     if (_supabase) _supabase.auth.signOut();
     sessionStorage.clear();
-    window.location.href = '/login';
+    window.location.href = '/';
   }
 
   // ── API helpers ──────────────────────────────────────
