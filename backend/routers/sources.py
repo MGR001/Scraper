@@ -11,6 +11,34 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+async def _source_new_or_changed(db, source_id: str, cutoff: str) -> dict[str, int]:
+    """new/changed counts for one source, given its latest session's start
+    time. Both queries are naturally bounded: the first to just this one
+    crawl's freshly-inserted rows, the second to just those specific URLs
+    (never the whole table) -- the same shape already proven correct in
+    competitor_changes()."""
+    fresh_res = await asyncio.to_thread(
+        lambda: db.table("scraped_content").select("url")
+        .eq("source_id", source_id)
+        .gte("scraped_at", cutoff)
+        .execute()
+    )
+    fresh_urls = list({r["url"] for r in (fresh_res.data or [])})
+    if not fresh_urls:
+        return {"new": 0, "changed": 0}
+
+    prior_res = await asyncio.to_thread(
+        lambda: db.table("scraped_content").select("url")
+        .eq("source_id", source_id)
+        .lt("scraped_at", cutoff)
+        .in_("url", fresh_urls)
+        .execute()
+    )
+    had_prior = {r["url"] for r in (prior_res.data or [])}
+    changed_n = sum(1 for u in fresh_urls if u in had_prior)
+    return {"new": len(fresh_urls) - changed_n, "changed": changed_n}
+
+
 async def _new_or_changed_counts(db, source_ids: list[str]) -> dict[str, dict[str, int]]:
     """Per source: {"new": n, "changed": m} from that source's latest
     finished crawl. "new" = a URL with zero older evidence (nothing about
@@ -19,9 +47,16 @@ async def _new_or_changed_counts(db, source_ids: list[str]) -> dict[str, dict[st
     chunk this time (scraped_at only changes on first insert, so a fresh
     chunk means real new content, not just a reconfirmation).
 
-    Two batched queries total, not one pair per source: every source's
-    latest session start in one call, then every scraped_content row for
-    these sources in one call, classified per (source, url) in Python."""
+    One query per source (via _source_new_or_changed), not a single
+    workspace-wide batch. An earlier version tried to batch this into 2-3
+    queries total by bounding on the earliest cutoff across all sources --
+    but with several active sources each producing hundreds to thousands
+    of rows per crawl, that "small slice" was still routinely 1000+ rows,
+    which is exactly Supabase's default unbounded-select cap. It silently
+    truncated to an arbitrary subset and undercounted almost every source.
+    Scoping each query to one source's one crawl keeps every request small
+    regardless of workspace size, which matters more here than round-trip
+    count."""
     if not source_ids:
         return {}
     try:
@@ -37,32 +72,10 @@ async def _new_or_changed_counts(db, source_ids: list[str]) -> dict[str, dict[st
             sid = row["source_id"]
             if sid not in latest_start:  # first hit per source_id = latest, rows are desc-ordered
                 latest_start[sid] = row["started_at"]
-        if not latest_start:
-            return {}
-
-        content_res = await asyncio.to_thread(
-            lambda: db.table("scraped_content").select("source_id, url, scraped_at")
-            .in_("source_id", list(latest_start.keys()))
-            .execute()
-        )
-        # source_id -> url -> {"old": bool, "new": bool}
-        per_url: dict[str, dict[str, dict[str, bool]]] = {}
-        for row in (content_res.data or []):
-            sid = row["source_id"]
-            cutoff = latest_start.get(sid)
-            if not cutoff:
-                continue
-            entry = per_url.setdefault(sid, {}).setdefault(row["url"], {"old": False, "new": False})
-            if row["scraped_at"] >= cutoff:
-                entry["new"] = True
-            else:
-                entry["old"] = True
 
         counts: dict[str, dict[str, int]] = {}
-        for sid, urls in per_url.items():
-            new_n = sum(1 for u in urls.values() if u["new"] and not u["old"])
-            changed_n = sum(1 for u in urls.values() if u["new"] and u["old"])
-            counts[sid] = {"new": new_n, "changed": changed_n}
+        for sid, cutoff in latest_start.items():
+            counts[sid] = await _source_new_or_changed(db, sid, cutoff)
         return counts
     except Exception:
         return {}
