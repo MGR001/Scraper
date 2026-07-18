@@ -283,14 +283,17 @@ async def generate_competitor_changes(
     )
 
     new_pages_note = (
-        f"These pages are confirmed brand-new since the last scrape (they did not exist "
-        f"before): {', '.join(new_page_titles)}. You MUST account for every one of them in "
-        "\"changes\" — this overrides the instruction to ignore minor differences. If their "
-        "content appears in RECENT CONTENT below, describe specifically what the page is "
-        "about and why it might matter (e.g. what it announces, offers, or targets) rather "
-        "than only noting that a page was added. If a listed page's content isn't present "
-        "in RECENT CONTENT, still list it by title and say a new page was found without "
-        "further detail.\n"
+        "Note: some of RECENT CONTENT below is from pages that are brand-new on this site "
+        "since the last scrape — they don't exist anywhere in PREVIOUS CONTENT. Give real "
+        "weight to whatever new products, features, pricing, messaging, or positioning shows "
+        "up only in RECENT CONTENT — this overrides the instruction to ignore minor "
+        "differences; don't dismiss something as minor just because it comes from a single "
+        "page. Every bullet in \"changes\" must be about substance — what's new, what "
+        "direction it signals, what stands out — written the same executive way you'd "
+        "describe any other change. Never phrase a bullet as a page being added, found, or "
+        "created, and never reference page titles or URLs directly. If you genuinely can't "
+        "tell what a new page is about from the content given, leave it out rather than "
+        "writing a placeholder bullet about its existence.\n"
         if new_page_titles else ""
     )
 
