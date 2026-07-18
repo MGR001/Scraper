@@ -16,6 +16,16 @@
     if (name === 'mentions')    loadMentions(true);
   }
 
+  // ── Dashboard sub-tabs ─────────────────────────────────
+  function showDashTab(tab) {
+    document.querySelectorAll('#page-dashboard .src-tab-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.dashTab === tab)
+    );
+    document.getElementById('dash-tab-overview').classList.toggle('hidden', tab !== 'overview');
+    document.getElementById('dash-tab-activity').classList.toggle('hidden', tab !== 'activity');
+    if (tab === 'activity') loadDashboardActivity();
+  }
+
   // ── Supabase auth ─────────────────────────────────────────
   let _supabase    = null;
   let _session     = null;
@@ -208,6 +218,123 @@
       document.getElementById('dash-subtitle').textContent = 'Error loading dashboard';
       console.error(e);
     }
+  }
+
+  // ── Dashboard: Activity tab ─────────────────────────
+  let _activityData = null;
+
+  async function loadDashboardActivity(force = false) {
+    const grid = document.getElementById('dash-activity-grid');
+    if (_activityData && !force) { renderActivityGrid(_activityData); return; }
+    grid.innerHTML = '<p class="text-slate-500 text-sm">Loading…</p>';
+    try {
+      _activityData = await api('/api/scraper/daily-activity?days=21');
+      renderActivityGrid(_activityData);
+    } catch (e) {
+      grid.innerHTML = `<p class="text-red-400 text-sm">Error: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderActivityGrid(data) {
+    const grid = document.getElementById('dash-activity-grid');
+    const days = data.days || [];
+    const sources = data.sources || [];
+    if (!sources.length) {
+      grid.innerHTML = '<p class="text-slate-500 text-sm">No sources yet.</p>';
+      return;
+    }
+    grid.innerHTML = sources.map(s => `
+      <div class="bg-card border border-border rounded-xl p-4">
+        <div class="flex items-center justify-between gap-2 mb-0.5">
+          <span class="font-semibold text-slate-900 text-sm truncate">${esc(s.name)}</span>
+          <div class="flex items-center gap-2 shrink-0">
+            ${s.new_pages > 0     ? `<span class="text-xs font-medium text-emerald-600">${s.new_pages} new</span>` : ''}
+            ${s.changed_pages > 0 ? `<span class="text-xs font-medium text-amber-600">${s.changed_pages} changed</span>` : ''}
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-400 mb-2">Pages scraped per day</p>
+        <div class="daily-chart" id="activity-chart-${s.source_id}"></div>
+      </div>`).join('');
+
+    sources.forEach(s => {
+      const el = document.getElementById(`activity-chart-${s.source_id}`);
+      if (el) renderDailyBarChart(el, days, s.daily_pages, '#2563eb');
+    });
+  }
+
+  function _roundedTopBarPath(x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h));
+    if (h <= 0) return '';
+    return `M${x},${y + h} L${x},${y + r} Q${x},${y} ${x + r},${y} `
+         + `L${x + w - r},${y} Q${x + w},${y} ${x + w},${y + r} L${x + w},${y + h} Z`;
+  }
+
+  function renderDailyBarChart(container, days, values, color) {
+    const width  = container.clientWidth || 320;
+    const height = 60;
+    const n      = days.length || 1;
+    const colW   = width / n;
+    const barW   = Math.max(1, Math.min(24, colW - 2));
+    const maxVal = Math.max(...values, 1);
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', String(height));
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.style.display = 'block';
+    svg.style.overflow = 'visible';
+
+    values.forEach((v, i) => {
+      const x = i * colW;
+      const barH = maxVal > 0 ? Math.max(v > 0 ? 2 : 0, Math.round((v / maxVal) * (height - 4))) : 0;
+      const bx = x + (colW - barW) / 2;
+
+      const hit = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      hit.setAttribute('x', String(x));
+      hit.setAttribute('y', '0');
+      hit.setAttribute('width', String(colW));
+      hit.setAttribute('height', String(height));
+      hit.setAttribute('fill', 'transparent');
+      hit.classList.add('daily-bar-hit');
+      hit.style.cursor = 'default';
+      hit.addEventListener('pointerenter', (evt) => showChartTooltip(evt, days[i], v));
+      hit.addEventListener('pointermove', moveChartTooltip);
+      hit.addEventListener('pointerleave', hideChartTooltip);
+      svg.appendChild(hit);
+
+      if (barH > 0) {
+        const bar = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        bar.setAttribute('d', _roundedTopBarPath(bx, height - barH, barW, barH, 3));
+        bar.setAttribute('fill', color);
+        bar.classList.add('daily-bar');
+        bar.style.pointerEvents = 'none';
+        svg.appendChild(bar);
+      }
+    });
+
+    container.innerHTML = '';
+    container.appendChild(svg);
+  }
+
+  function showChartTooltip(evt, dateStr, value) {
+    const tt = document.getElementById('chart-tooltip');
+    const d = new Date(dateStr + 'T00:00:00');
+    const label = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    tt.querySelector('.tt-value').textContent = `${value} page${value !== 1 ? 's' : ''}`;
+    tt.querySelector('.tt-date').textContent = `${label}:`;
+    tt.style.display = 'block';
+    moveChartTooltip(evt);
+  }
+
+  function moveChartTooltip(evt) {
+    const tt = document.getElementById('chart-tooltip');
+    tt.style.left = `${evt.clientX}px`;
+    tt.style.top  = `${evt.clientY}px`;
+  }
+
+  function hideChartTooltip() {
+    document.getElementById('chart-tooltip').style.display = 'none';
   }
 
   // ── Sources sub-tabs ───────────────────────────────

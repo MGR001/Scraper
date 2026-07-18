@@ -288,3 +288,63 @@ async def get_stats(ws: WorkspaceContext = Depends(get_workspace)):
         "total_chunks": count_res.count or 0,
         "last_scrape": last_scrape,
     }
+
+
+@router.get("/daily-activity")
+async def daily_activity(days: int = 21, ws: WorkspaceContext = Depends(get_workspace)):
+    """Per-source daily pages-scraped timeline (for the Dashboard's Activity
+    tab) plus each source's current new/changed page counts (same numbers
+    as the Sources tab, reused rather than recomputed)."""
+    from datetime import datetime, timedelta, timezone
+
+    from .sources import _new_or_changed_counts
+
+    db = get_service_db()
+
+    sources_res = await asyncio.to_thread(
+        lambda: db.table("sources").select("id, name, category")
+        .eq("workspace_id", ws.workspace_id)
+        .execute()
+    )
+    sources = sources_res.data or []
+    if not sources:
+        return {"days": [], "sources": []}
+
+    source_ids = [s["id"] for s in sources]
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    sessions_res = await asyncio.to_thread(
+        lambda: db.table("scrape_sessions").select("source_id, started_at, pages")
+        .in_("source_id", source_ids)
+        .not_.is_("finished_at", "null")
+        .gte("started_at", cutoff)
+        .execute()
+    )
+
+    today = datetime.now(timezone.utc).date()
+    day_list = [(today - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
+    day_index = {d: i for i, d in enumerate(day_list)}
+
+    daily_map: dict[str, list[int]] = {sid: [0] * days for sid in source_ids}
+    for row in (sessions_res.data or []):
+        sid = row["source_id"]
+        idx = day_index.get(row["started_at"][:10])
+        if idx is not None:
+            daily_map[sid][idx] += row.get("pages") or 0
+
+    new_changed_map = await _new_or_changed_counts(db, source_ids)
+
+    result_sources = []
+    for s in sources:
+        sid = s["id"]
+        counts = new_changed_map.get(sid, {"new": 0, "changed": 0})
+        result_sources.append({
+            "source_id": sid,
+            "name": s["name"],
+            "category": s["category"],
+            "daily_pages": daily_map[sid],
+            "new_pages": counts["new"],
+            "changed_pages": counts["changed"],
+        })
+
+    return {"days": day_list, "sources": result_sources}

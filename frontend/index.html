@@ -103,6 +103,15 @@
     }
     .src-tab-btn:hover  { color: #1e293b; }
     .src-tab-btn.active { color: #1e293b; border-bottom-color: #3b82f6; }
+    #chart-tooltip {
+      position: fixed; z-index: 60; pointer-events: none;
+      background: #0f172a; color: #f8fafc; font-size: 11px; line-height: 1.4;
+      padding: 5px 8px; border-radius: 6px; white-space: nowrap;
+      transform: translate(-50%, calc(-100% - 8px)); display: none;
+    }
+    #chart-tooltip .tt-date { color: #94a3b8; }
+    #chart-tooltip .tt-value { font-weight: 700; }
+    .daily-bar-hit:hover + .daily-bar { filter: brightness(1.15); }
     .gtm-lens-btn { background: transparent; color: #64748b; cursor: pointer; }
     .gtm-lens-btn:hover { background: #f1f5f9; color: #1e293b; }
     .gtm-lens-btn.active { background: #3b82f6; color: #fff; }
@@ -476,6 +485,14 @@
       </button>
     </div>
 
+    <!-- Dashboard sub-tabs -->
+    <div class="flex gap-1 border-b border-border mb-6">
+      <button class="src-tab-btn active" data-dash-tab="overview" onclick="showDashTab('overview')">Overview</button>
+      <button class="src-tab-btn" data-dash-tab="activity" onclick="showDashTab('activity')">Activity</button>
+    </div>
+
+    <div id="dash-tab-overview">
+
     <!-- KPI Strip -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
       <div class="bg-card border border-border rounded-xl p-4">
@@ -527,6 +544,16 @@
         </div>
       </div>
     </div>
+
+    </div><!-- end dash-tab-overview -->
+
+    <div id="dash-tab-activity" class="hidden">
+      <p class="text-sm text-slate-400 mb-4">Pages scraped per day, last 21 days, per source. <span class="text-emerald-600 font-medium">New</span> and <span class="text-amber-600 font-medium">changed</span> page counts are from each source's most recent scrape.</p>
+      <div id="dash-activity-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <p class="text-slate-500 text-sm">Loading…</p>
+      </div>
+    </div><!-- end dash-tab-activity -->
+
   </div>
 
   <!-- ── Competitors ────────────────────────────────── -->
@@ -1191,6 +1218,8 @@
 
   </main>
   </div><!-- end layout -->
+
+  <div id="chart-tooltip"><span class="tt-date"></span> <span class="tt-value"></span></div>
 
   <!-- ── JavaScript ─────────────────────────────────── -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
