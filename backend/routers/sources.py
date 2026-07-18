@@ -11,6 +11,49 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+async def _new_or_changed_counts(db, source_ids: list[str]) -> dict[str, int]:
+    """Per source, how many distinct URLs got at least one freshly-inserted
+    chunk (new page, or existing page whose content changed) during that
+    source's latest finished crawl. Two batched queries total, not one pair
+    per source: fetch every source's latest session start in one call, then
+    every relevant scraped_content row in one call bounded by the earliest
+    of those cutoffs, and match them up in Python."""
+    if not source_ids:
+        return {}
+    try:
+        sessions_res = await asyncio.to_thread(
+            lambda: db.table("scrape_sessions").select("source_id, started_at")
+            .in_("source_id", source_ids)
+            .not_.is_("finished_at", "null")
+            .order("started_at", desc=True)
+            .execute()
+        )
+        latest_start: dict[str, str] = {}
+        for row in (sessions_res.data or []):
+            sid = row["source_id"]
+            if sid not in latest_start:  # first hit per source_id = latest, rows are desc-ordered
+                latest_start[sid] = row["started_at"]
+        if not latest_start:
+            return {}
+
+        earliest_cutoff = min(latest_start.values())
+        content_res = await asyncio.to_thread(
+            lambda: db.table("scraped_content").select("source_id, url, scraped_at")
+            .in_("source_id", list(latest_start.keys()))
+            .gte("scraped_at", earliest_cutoff)
+            .execute()
+        )
+        new_urls: dict[str, set[str]] = {}
+        for row in (content_res.data or []):
+            sid = row["source_id"]
+            cutoff = latest_start.get(sid)
+            if cutoff and row["scraped_at"] >= cutoff:
+                new_urls.setdefault(sid, set()).add(row["url"])
+        return {sid: len(urls) for sid, urls in new_urls.items()}
+    except Exception:
+        return {}
+
+
 @router.get("/")
 async def list_sources(ws: WorkspaceContext = Depends(get_workspace)):
     db = get_service_db()
@@ -30,12 +73,15 @@ async def list_sources(ws: WorkspaceContext = Depends(get_workspace)):
     except Exception:
         stats_map = {}
 
+    new_changed_map = await _new_or_changed_counts(db, [s["id"] for s in sources.data])
+
     enriched = []
     for s in sources.data:
         sid = s["id"]
         row = stats_map.get(sid, {})
         s["pages_scraped"] = row.get("pages", 0)
         s["chunks_stored"] = row.get("chunks", 0)
+        s["new_or_changed_pages"] = new_changed_map.get(sid, 0)
         enriched.append(s)
 
     return enriched

@@ -1181,6 +1181,9 @@
                   ${s.pages_scraped} page${s.pages_scraped !== 1 ? 's' : ''}
                 </button>
                 <span class="text-xs text-slate-600">(${s.chunks_stored} chunks)</span>` : ''}
+                ${s.new_or_changed_pages > 0 ? `
+                <span class="text-xs text-slate-500">&middot;</span>
+                <span class="text-xs font-medium text-amber-600">${s.new_or_changed_pages} new/changed</span>` : ''}
               </div>              ${s.sitemap_url ? `
               <div class="flex items-center gap-1.5 mt-1">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -1502,6 +1505,10 @@
       const scrapeInfo = r.latest_scrape
         ? `<span class="text-xs text-slate-600">Latest: ${fmtDate(r.latest_scrape)}${
             r.previous_scrape ? ` &nbsp;&middot;&nbsp; Prev: ${fmtDate(r.previous_scrape)}` : ' &nbsp;&middot;&nbsp; <em>no previous scrape</em>'
+          }${
+            r.new_or_changed_pages > 0
+              ? ` &nbsp;&middot;&nbsp; <span class="text-amber-600 font-medium">${r.new_or_changed_pages} new/changed page${r.new_or_changed_pages !== 1 ? 's' : ''}</span>`
+              : ''
           }</span>` : '';
       const changesHtml = (r.changes || []).length
         ? `<ul class="mt-2 space-y-1">${r.changes.map(c =>

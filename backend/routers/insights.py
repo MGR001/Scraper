@@ -318,12 +318,21 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
         )
         recent_chunks = [r["content"] for r in (recent_res.data or []) if r.get("content")]
 
+        # Baseline content: anything that already existed before this latest
+        # crawl started. NOT queried by prev_session's session_id — every
+        # unchanged chunk gets its session_id reassigned forward to the
+        # newest crawl that reconfirmed it (see _store_content_chunks), so
+        # after any new scrape almost nothing stays tagged with an older
+        # session_id. scraped_at is set once on first insert and never
+        # touched again, so it's the only reliable "did this exist before"
+        # signal.
         old_chunks: list[str] = []
         if prev_session:
             old_res = await asyncio.to_thread(
-                lambda sess_id=prev_session["id"]: db.table("scraped_content")
+                lambda sid=src["id"], cutoff=latest_session["started_at"]: db.table("scraped_content")
                 .select("content")
-                .eq("session_id", sess_id)
+                .eq("source_id", sid)
+                .lt("scraped_at", cutoff)
                 .order("scraped_at", desc=True)
                 .limit(12)
                 .execute()
@@ -362,9 +371,13 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
             own_company=None if is_own else own_company,
             new_page_titles=new_page_titles,
         )
-        if new_page_titles:
+        if new_page_titles and old_chunks:
             # Belt-and-suspenders: a confirmed new page is a real change even
             # in the unlikely case the model's own has_changes still says no.
+            # Gated on old_chunks being non-empty — if there's no real
+            # baseline, generate_competitor_changes already correctly
+            # reported "no previous data"; forcing has_changes true on top
+            # of that would contradict its own summary text.
             change_data["has_changes"] = True
 
         results.append({
@@ -372,6 +385,7 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
             "url": src["url"],
             "is_own_company": is_own,
             **change_data,
+            "new_or_changed_pages": len(new_page_titles),
             "latest_scrape": latest_session["started_at"],
             "previous_scrape": prev_session["started_at"] if prev_session else None,
         })
