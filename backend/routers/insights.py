@@ -330,18 +330,14 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
             )
             old_chunks = [r["content"] for r in (old_res.data or []) if r.get("content")]
 
-        # For the own company's own source, there's no separate "own company" to
-        # compare it against strategically — skip that framing and just report
-        # what changed.
-        change_data = await generate_competitor_changes(
-            src["name"], old_chunks, recent_chunks,
-            own_company=None if is_own else own_company,
-        )
-
-        # New pages are always a change, whether or not the LLM's 12-chunk
-        # sample happened to include one. Only runs when prev_session exists,
-        # so a source's first-ever scrape (no baseline yet) never reports
-        # changes here — new_page_urls would otherwise include every page.
+        # Confirmed brand-new pages (existed before the previous baseline
+        # session, missing; exist now) get named to the LLM explicitly so
+        # it interprets their actual content instead of either missing them
+        # or — the old behaviour — us bolting on a bare "New page found: X"
+        # bullet with no interpretation. Only computed when prev_session
+        # exists, so a source's first-ever scrape (no baseline yet) never
+        # reports changes — every page would otherwise look "new".
+        new_page_titles: list[str] = []
         if prev_session:
             new_pages_res = await asyncio.to_thread(
                 lambda sess_id=latest_session["id"], since=latest_session["started_at"]:
@@ -353,18 +349,23 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
                     .execute()
             )
             seen_urls: set[str] = set()
-            new_pages: list[str] = []
             for row in (new_pages_res.data or []):
                 if row["url"] not in seen_urls:
                     seen_urls.add(row["url"])
-                    new_pages.append(row.get("title") or row["url"])
+                    new_page_titles.append(row.get("title") or row["url"])
 
-            if new_pages:
-                change_data["has_changes"] = True
-                shown = [f"New page found: {t}" for t in new_pages[:10]]
-                if len(new_pages) > 10:
-                    shown.append(f"...and {len(new_pages) - 10} more new page(s)")
-                change_data["changes"] = shown + list(change_data.get("changes") or [])
+        # For the own company's own source, there's no separate "own company" to
+        # compare it against strategically — skip that framing and just report
+        # what changed.
+        change_data = await generate_competitor_changes(
+            src["name"], old_chunks, recent_chunks,
+            own_company=None if is_own else own_company,
+            new_page_titles=new_page_titles,
+        )
+        if new_page_titles:
+            # Belt-and-suspenders: a confirmed new page is a real change even
+            # in the unlikely case the model's own has_changes still says no.
+            change_data["has_changes"] = True
 
         results.append({
             "name": src["name"],

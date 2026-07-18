@@ -244,7 +244,7 @@ async def generate_comparison(sources: list[dict], own_company: dict | None = No
 
 async def generate_competitor_changes(
     source_name: str, old_chunks: list[str], new_chunks: list[str],
-    own_company: dict | None = None,
+    own_company: dict | None = None, new_page_titles: list[str] | None = None,
 ) -> dict:
     """
     Compare old vs recent scraped content chunks for a competitor.
@@ -252,6 +252,13 @@ async def generate_competitor_changes(
     provided, changes are assessed for strategic relevance to it —
     called out in the summary/changes text, not a separate field, so
     the response shape stays the same either way.
+
+    new_page_titles, if given, names pages that are confirmed brand-new
+    since the last scrape (not just something the model might notice in
+    the chunk sample). The model is told to always account for them with
+    real content interpretation — what's on the page, not just that it
+    exists — rather than letting its own "ignore minor differences"
+    judgment silently drop them.
     """
     import json as _json
 
@@ -275,13 +282,25 @@ async def generate_competitor_changes(
         if own_company else ""
     )
 
+    new_pages_note = (
+        f"These pages are confirmed brand-new since the last scrape (they did not exist "
+        f"before): {', '.join(new_page_titles)}. You MUST account for every one of them in "
+        "\"changes\" — this overrides the instruction to ignore minor differences. If their "
+        "content appears in RECENT CONTENT below, describe specifically what the page is "
+        "about and why it might matter (e.g. what it announces, offers, or targets) rather "
+        "than only noting that a page was added. If a listed page's content isn't present "
+        "in RECENT CONTENT, still list it by title and say a new page was found without "
+        "further detail.\n"
+        if new_page_titles else ""
+    )
+
     system_prompt = (
         "You are a competitive intelligence analyst. "
         "Compare the PREVIOUS and RECENT scraped content from the same competitor website. "
         "Identify meaningful changes: new products or features, pricing changes, messaging shifts, "
         "new partnerships, leadership changes, or structural changes. "
         "Ignore minor cosmetic or navigation differences. "
-        + own_note +
+        + own_note + new_pages_note +
         "Return ONLY valid JSON with this schema:\n"
         "{\n"
         "  \"has_changes\": <true|false>,\n"
