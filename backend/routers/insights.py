@@ -307,16 +307,20 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
         # chunks that all get touched into the same session_id; without this
         # ordering, an unordered LIMIT 12 almost never lands on the handful
         # of genuinely new chunks, so brand-new pages silently never reach
-        # the diff the LLM sees.
+        # the diff the LLM sees. url travels with each chunk so the model
+        # can cite a specific source page per change.
         recent_res = await asyncio.to_thread(
             lambda sess_id=latest_session["id"]: db.table("scraped_content")
-            .select("content")
+            .select("content, url")
             .eq("session_id", sess_id)
             .order("scraped_at", desc=True)
             .limit(12)
             .execute()
         )
-        recent_chunks = [r["content"] for r in (recent_res.data or []) if r.get("content")]
+        recent_chunks = [
+            {"content": r["content"], "url": r.get("url", "")}
+            for r in (recent_res.data or []) if r.get("content")
+        ]
 
         # Baseline content: anything that already existed before this latest
         # crawl started. NOT queried by prev_session's session_id — every
@@ -326,42 +330,66 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
         # session_id. scraped_at is set once on first insert and never
         # touched again, so it's the only reliable "did this exist before"
         # signal.
-        old_chunks: list[str] = []
+        old_chunks: list[dict] = []
         if prev_session:
             old_res = await asyncio.to_thread(
                 lambda sid=src["id"], cutoff=latest_session["started_at"]: db.table("scraped_content")
-                .select("content")
+                .select("content, url")
                 .eq("source_id", sid)
                 .lt("scraped_at", cutoff)
                 .order("scraped_at", desc=True)
                 .limit(12)
                 .execute()
             )
-            old_chunks = [r["content"] for r in (old_res.data or []) if r.get("content")]
+            old_chunks = [
+                {"content": r["content"], "url": r.get("url", "")}
+                for r in (old_res.data or []) if r.get("content")
+            ]
 
-        # Confirmed brand-new pages (existed before the previous baseline
-        # session, missing; exist now) get named to the LLM explicitly so
-        # it interprets their actual content instead of either missing them
-        # or — the old behaviour — us bolting on a bare "New page found: X"
-        # bullet with no interpretation. Only computed when prev_session
-        # exists, so a source's first-ever scrape (no baseline yet) never
-        # reports changes — every page would otherwise look "new".
+        # Confirmed brand-new-content pages get named to the LLM explicitly
+        # so it interprets their actual content instead of either missing
+        # them or — the old behaviour — us bolting on a bare "New page
+        # found: X" bullet with no interpretation. Split into "new" (no
+        # older evidence of this URL at all) vs "changed" (URL already had
+        # content before, and picked up at least one freshly-inserted chunk
+        # this crawl — a real edit, not just a reconfirmation, since
+        # scraped_at only changes on first insert). Only computed when
+        # prev_session exists, so a source's first-ever scrape (no baseline
+        # yet) never reports changes — every page would otherwise look new.
         new_page_titles: list[str] = []
+        new_pages_count = 0
+        changed_pages_count = 0
         if prev_session:
-            new_pages_res = await asyncio.to_thread(
-                lambda sess_id=latest_session["id"], since=latest_session["started_at"]:
+            fresh_res = await asyncio.to_thread(
+                lambda sid=src["id"], since=latest_session["started_at"]:
                     db.table("scraped_content")
                     .select("url, title")
-                    .eq("session_id", sess_id)
+                    .eq("source_id", sid)
                     .gte("scraped_at", since)  # scraped_at is set once, on first insert —
                                                 # unchanged when a chunk is merely reconfirmed
                     .execute()
             )
             seen_urls: set[str] = set()
-            for row in (new_pages_res.data or []):
+            fresh_urls: list[str] = []
+            for row in (fresh_res.data or []):
                 if row["url"] not in seen_urls:
                     seen_urls.add(row["url"])
+                    fresh_urls.append(row["url"])
                     new_page_titles.append(row.get("title") or row["url"])
+
+            if fresh_urls:
+                prior_res = await asyncio.to_thread(
+                    lambda sid=src["id"], cutoff=latest_session["started_at"], urls=fresh_urls:
+                        db.table("scraped_content")
+                        .select("url")
+                        .eq("source_id", sid)
+                        .lt("scraped_at", cutoff)
+                        .in_("url", urls)
+                        .execute()
+                )
+                had_prior = {r["url"] for r in (prior_res.data or [])}
+                changed_pages_count = sum(1 for u in fresh_urls if u in had_prior)
+                new_pages_count = len(fresh_urls) - changed_pages_count
 
         # For the own company's own source, there's no separate "own company" to
         # compare it against strategically — skip that framing and just report
@@ -385,7 +413,8 @@ async def competitor_changes(ws: WorkspaceContext = Depends(get_workspace)):
             "url": src["url"],
             "is_own_company": is_own,
             **change_data,
-            "new_or_changed_pages": len(new_page_titles),
+            "new_pages": new_pages_count,
+            "changed_pages": changed_pages_count,
             "latest_scrape": latest_session["started_at"],
             "previous_scrape": prev_session["started_at"] if prev_session else None,
         })

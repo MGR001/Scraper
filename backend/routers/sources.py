@@ -11,13 +11,17 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-async def _new_or_changed_counts(db, source_ids: list[str]) -> dict[str, int]:
-    """Per source, how many distinct URLs got at least one freshly-inserted
-    chunk (new page, or existing page whose content changed) during that
-    source's latest finished crawl. Two batched queries total, not one pair
-    per source: fetch every source's latest session start in one call, then
-    every relevant scraped_content row in one call bounded by the earliest
-    of those cutoffs, and match them up in Python."""
+async def _new_or_changed_counts(db, source_ids: list[str]) -> dict[str, dict[str, int]]:
+    """Per source: {"new": n, "changed": m} from that source's latest
+    finished crawl. "new" = a URL with zero older evidence (nothing about
+    it existed before this crawl). "changed" = a URL that already had
+    content before this crawl AND picked up at least one freshly-inserted
+    chunk this time (scraped_at only changes on first insert, so a fresh
+    chunk means real new content, not just a reconfirmation).
+
+    Two batched queries total, not one pair per source: every source's
+    latest session start in one call, then every scraped_content row for
+    these sources in one call, classified per (source, url) in Python."""
     if not source_ids:
         return {}
     try:
@@ -36,20 +40,30 @@ async def _new_or_changed_counts(db, source_ids: list[str]) -> dict[str, int]:
         if not latest_start:
             return {}
 
-        earliest_cutoff = min(latest_start.values())
         content_res = await asyncio.to_thread(
             lambda: db.table("scraped_content").select("source_id, url, scraped_at")
             .in_("source_id", list(latest_start.keys()))
-            .gte("scraped_at", earliest_cutoff)
             .execute()
         )
-        new_urls: dict[str, set[str]] = {}
+        # source_id -> url -> {"old": bool, "new": bool}
+        per_url: dict[str, dict[str, dict[str, bool]]] = {}
         for row in (content_res.data or []):
             sid = row["source_id"]
             cutoff = latest_start.get(sid)
-            if cutoff and row["scraped_at"] >= cutoff:
-                new_urls.setdefault(sid, set()).add(row["url"])
-        return {sid: len(urls) for sid, urls in new_urls.items()}
+            if not cutoff:
+                continue
+            entry = per_url.setdefault(sid, {}).setdefault(row["url"], {"old": False, "new": False})
+            if row["scraped_at"] >= cutoff:
+                entry["new"] = True
+            else:
+                entry["old"] = True
+
+        counts: dict[str, dict[str, int]] = {}
+        for sid, urls in per_url.items():
+            new_n = sum(1 for u in urls.values() if u["new"] and not u["old"])
+            changed_n = sum(1 for u in urls.values() if u["new"] and u["old"])
+            counts[sid] = {"new": new_n, "changed": changed_n}
+        return counts
     except Exception:
         return {}
 
@@ -81,7 +95,9 @@ async def list_sources(ws: WorkspaceContext = Depends(get_workspace)):
         row = stats_map.get(sid, {})
         s["pages_scraped"] = row.get("pages", 0)
         s["chunks_stored"] = row.get("chunks", 0)
-        s["new_or_changed_pages"] = new_changed_map.get(sid, 0)
+        counts = new_changed_map.get(sid, {"new": 0, "changed": 0})
+        s["new_pages"] = counts["new"]
+        s["changed_pages"] = counts["changed"]
         enriched.append(s)
 
     return enriched

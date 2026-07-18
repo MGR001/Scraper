@@ -1181,9 +1181,12 @@
                   ${s.pages_scraped} page${s.pages_scraped !== 1 ? 's' : ''}
                 </button>
                 <span class="text-xs text-slate-600">(${s.chunks_stored} chunks)</span>` : ''}
-                ${s.new_or_changed_pages > 0 ? `
+                ${s.new_pages > 0 ? `
                 <span class="text-xs text-slate-500">&middot;</span>
-                <span class="text-xs font-medium text-amber-600">${s.new_or_changed_pages} new/changed</span>` : ''}
+                <span class="text-xs font-medium text-emerald-600">${s.new_pages} new</span>` : ''}
+                ${s.changed_pages > 0 ? `
+                <span class="text-xs text-slate-500">&middot;</span>
+                <span class="text-xs font-medium text-amber-600">${s.changed_pages} changed</span>` : ''}
               </div>              ${s.sitemap_url ? `
               <div class="flex items-center gap-1.5 mt-1">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -1502,18 +1505,27 @@
       const dot   = r.has_changes ? 'bg-amber-400' : 'bg-emerald-500';
       const label = r.has_changes ? 'Changes detected' : 'No significant changes';
       const labelCol = r.has_changes ? 'text-amber-400' : 'text-emerald-400';
+      const pageCountsParts = [];
+      if (r.new_pages > 0)     pageCountsParts.push(`<span class="text-emerald-600 font-medium">${r.new_pages} new page${r.new_pages !== 1 ? 's' : ''}</span>`);
+      if (r.changed_pages > 0) pageCountsParts.push(`<span class="text-amber-600 font-medium">${r.changed_pages} changed page${r.changed_pages !== 1 ? 's' : ''}</span>`);
       const scrapeInfo = r.latest_scrape
         ? `<span class="text-xs text-slate-600">Latest: ${fmtDate(r.latest_scrape)}${
             r.previous_scrape ? ` &nbsp;&middot;&nbsp; Prev: ${fmtDate(r.previous_scrape)}` : ' &nbsp;&middot;&nbsp; <em>no previous scrape</em>'
-          }${
-            r.new_or_changed_pages > 0
-              ? ` &nbsp;&middot;&nbsp; <span class="text-amber-600 font-medium">${r.new_or_changed_pages} new/changed page${r.new_or_changed_pages !== 1 ? 's' : ''}</span>`
-              : ''
-          }</span>` : '';
+          }${pageCountsParts.length ? ` &nbsp;&middot;&nbsp; ${pageCountsParts.join(' &nbsp;&middot;&nbsp; ')}` : ''}</span>` : '';
       const changesHtml = (r.changes || []).length
-        ? `<ul class="mt-2 space-y-1">${r.changes.map(c =>
-            `<li class="flex items-start gap-1.5 text-xs text-amber-700"><span class="mt-1 shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400"></span>${esc(c)}</li>`
-          ).join('')}</ul>` : '';
+        ? `<ul class="mt-2 space-y-1">${r.changes.map(c => {
+            const text = typeof c === 'string' ? c : (c.text || '');
+            const url  = typeof c === 'string' ? null : c.url;
+            const citePill = url
+              ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer"
+                   class="inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-full px-1.5 py-0.5 ml-1.5 align-middle transition"
+                   title="${esc(url)}">
+                   source
+                   <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+                 </a>`
+              : '';
+            return `<li class="flex items-start gap-1.5 text-xs text-amber-700"><span class="mt-1 shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400"></span><span>${esc(text)}${citePill}</span></li>`;
+          }).join('')}</ul>` : '';
       const stableHtml = (r.stable || []).length
         ? `<ul class="mt-1 space-y-0.5">${r.stable.map(s =>
             `<li class="flex items-start gap-1.5 text-xs text-slate-500"><span class="mt-1 shrink-0 w-1.5 h-1.5 rounded-full bg-slate-600"></span>${esc(s)}</li>`
@@ -1579,7 +1591,11 @@
       if ((r.changes || []).length) {
         lines.push('');
         lines.push('What changed:');
-        r.changes.forEach(c => lines.push(`  • ${c}`));
+        r.changes.forEach(c => {
+          const text = typeof c === 'string' ? c : (c.text || '');
+          const url  = typeof c === 'string' ? null : c.url;
+          lines.push(`  • ${text}${url ? `\n    Source: ${url}` : ''}`);
+        });
       }
       if ((r.stable || []).length) {
         lines.push('');

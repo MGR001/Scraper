@@ -242,16 +242,27 @@ async def generate_comparison(sources: list[dict], own_company: dict | None = No
     return _json.loads(response.choices[0].message.content or "{}")
 
 
+def _format_labeled_chunks(chunks: list[dict]) -> str:
+    """Renders up to 8 {url, content} chunks as URL-labeled blocks so the
+    model can cite a source URL per change, then truncates the combined
+    text to a fixed budget (same cap as before the citation feature)."""
+    parts = [f"URL: {c.get('url', '')}\n{c.get('content', '')}" for c in chunks[:8]]
+    return "\n\n---\n\n".join(parts)[:4000]
+
+
 async def generate_competitor_changes(
-    source_name: str, old_chunks: list[str], new_chunks: list[str],
+    source_name: str, old_chunks: list[dict], new_chunks: list[dict],
     own_company: dict | None = None, new_page_titles: list[str] | None = None,
 ) -> dict:
     """
     Compare old vs recent scraped content chunks for a competitor.
-    Returns {has_changes, summary, changes, stable}. If own_company is
-    provided, changes are assessed for strategic relevance to it —
-    called out in the summary/changes text, not a separate field, so
-    the response shape stays the same either way.
+    old_chunks/new_chunks are lists of {"url": str, "content": str}.
+    Returns {has_changes, summary, changes, stable}, where each entry in
+    "changes" is {"text": str, "url": str | None} — url is the specific
+    page the fact was drawn from, for a citation link in the UI. If
+    own_company is provided, changes are assessed for strategic relevance
+    to it — called out in the summary/changes text, not a separate field,
+    so the response shape stays the same either way.
 
     new_page_titles, if given, names pages that are confirmed brand-new
     since the last scrape (not just something the model might notice in
@@ -262,8 +273,8 @@ async def generate_competitor_changes(
     """
     import json as _json
 
-    old_text = "\n\n---\n\n".join(old_chunks[:8])[:4000]
-    new_text = "\n\n---\n\n".join(new_chunks[:8])[:4000]
+    old_text = _format_labeled_chunks(old_chunks)
+    new_text = _format_labeled_chunks(new_chunks)
 
     if not old_text:
         return {
@@ -290,25 +301,31 @@ async def generate_competitor_changes(
         "differences; don't dismiss something as minor just because it comes from a single "
         "page. Every bullet in \"changes\" must be about substance — what's new, what "
         "direction it signals, what stands out — written the same executive way you'd "
-        "describe any other change. Never phrase a bullet as a page being added, found, or "
-        "created, and never reference page titles or URLs directly. If you genuinely can't "
-        "tell what a new page is about from the content given, leave it out rather than "
-        "writing a placeholder bullet about its existence.\n"
+        "describe any other change. If you genuinely can't tell what a new page is about "
+        "from the content given, leave it out rather than writing a placeholder bullet "
+        "about its existence.\n"
         if new_page_titles else ""
     )
 
     system_prompt = (
         "You are a competitive intelligence analyst. "
-        "Compare the PREVIOUS and RECENT scraped content from the same competitor website. "
+        "Compare the PREVIOUS and RECENT scraped content from the same competitor website — "
+        "each block below is labeled with the URL it came from. "
         "Identify meaningful changes: new products or features, pricing changes, messaging shifts, "
         "new partnerships, leadership changes, or structural changes. "
         "Ignore minor cosmetic or navigation differences. "
         + own_note + new_pages_note +
+        "For every entry in \"changes\", set \"url\" to the specific labeled URL the fact was "
+        "drawn from (pick the single most relevant one if it spans more than one). Set \"url\" "
+        "to null only if a change genuinely isn't tied to one specific page. The bullet text "
+        "itself must read as a normal executive statement about what changed — never mention "
+        "'page', 'found', 'added', or the URL/title within the text; the citation belongs only "
+        "in the \"url\" field, not the prose.\n"
         "Return ONLY valid JSON with this schema:\n"
         "{\n"
         "  \"has_changes\": <true|false>,\n"
         "  \"summary\": \"<2-3 sentence executive summary — what changed, or confirm no significant change>\",\n"
-        "  \"changes\": [\"<specific meaningful change 1>\", \"<specific change 2>\"],\n"
+        "  \"changes\": [{\"text\": \"<specific meaningful change>\", \"url\": \"<source URL or null>\"}],\n"
         "  \"stable\": [\"<important area with no change>\"]\n"
         "}"
     )
@@ -334,7 +351,18 @@ async def generate_competitor_changes(
         response_format={"type": "json_object"},
     )
     raw = response.choices[0].message.content or "{}"
-    return _json.loads(raw)
+    result = _json.loads(raw)
+
+    # Defensive normalization: the model occasionally returns a bare string
+    # instead of {text, url} despite the schema instructions above.
+    normalized = []
+    for c in (result.get("changes") or []):
+        if isinstance(c, dict):
+            normalized.append({"text": c.get("text", ""), "url": c.get("url") or None})
+        elif isinstance(c, str):
+            normalized.append({"text": c, "url": None})
+    result["changes"] = normalized
+    return result
 
 
 def _round_robin_sample(articles: list[dict], cap: int) -> list[dict]:
